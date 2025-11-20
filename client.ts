@@ -7,6 +7,7 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import { z } from "zod";
 import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import { newName } from "@csm-actions/label";
+import process from "node:process";
 
 const nowS = (): string => {
   const date = new Date();
