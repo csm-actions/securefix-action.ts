@@ -250,7 +250,7 @@ const createLabel = async (
       name: labelName,
       description: description,
     });
-  } catch (error: any) {
+  } catch (error) {
     if (githubAppToken.hasExpired(token.expiresAt)) {
       core.info("GitHub App token has already expired");
       return;
