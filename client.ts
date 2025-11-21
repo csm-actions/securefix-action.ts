@@ -21,20 +21,20 @@ const nowS = (): string => {
 
 type PullRequest = {
   title: string;
-  body: string;
+  body?: string;
   base: string;
-  labels: string[];
-  assignees: string[];
-  reviewers: string[];
-  team_reviewers: string[];
-  draft: boolean;
-  comment: string;
-  automerge_method: string;
-  project: {
-    number: number;
+  labels?: string[];
+  assignees?: string[];
+  reviewers?: string[];
+  team_reviewers?: string[];
+  draft?: boolean;
+  comment?: string;
+  automerge_method?: string;
+  project?: {
+    number?: number;
     owner: string;
     id?: string;
-  } | null;
+  };
   milestone_number?: number;
 };
 
@@ -43,14 +43,14 @@ type Inputs = {
   privateKey: string;
   // rootDir is a path to the root directory.
   // It must be a relative path from a git root directory.
-  rootDir: string;
+  rootDir?: string;
   serverRepository: string;
-  repo: string;
-  branch: string;
-  failIfChanges: boolean;
+  repo?: string;
+  branch?: string;
+  failIfChanges?: boolean;
   // files is a set of file paths from rootDir
-  files: Set<string>;
-  pr: PullRequest;
+  files?: Set<string>;
+  pr?: PullRequest;
   commitMessage: string;
   workspace: string;
 };
@@ -95,10 +95,11 @@ const listFixedFiles = async (rootDir: string): Promise<Set<string>> => {
 };
 
 export const request = async (inputs: Inputs): Promise<Result> => {
-  validateAutomergeMethod(inputs.pr.automerge_method);
-  validatePR(inputs.pr);
+  if (inputs.pr) {
+    validatePR(inputs.pr);
+  }
   const artifactName = generateArtifactName();
-  const fixedFilesFromRootDir = await listFixedFiles(inputs.rootDir);
+  const fixedFilesFromRootDir = await listFixedFiles(inputs.rootDir ?? "");
   if (fixedFilesFromRootDir.size === 0) {
     core.notice("No changes");
     return {
@@ -127,7 +128,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   );
 
   const fixedFiles = filteredFixedFilesFromRootDir.map((file) =>
-    path.join(inputs.rootDir, file)
+    path.join(inputs.rootDir ?? "", file)
   );
 
   // upload artifact
@@ -180,9 +181,9 @@ type Files = {
 
 const filterFiles = (
   fixedFiles: Set<string>,
-  files: Set<string>,
+  files?: Set<string>,
 ): string[] => {
-  if (files.size === 0) {
+  if (!files?.size) {
     return [...fixedFiles];
   }
   return [...files].filter((file) => fixedFiles.has(file));
@@ -217,20 +218,23 @@ const validatePR = (pr: PullRequest) => {
   if (pr.title !== "") {
     return;
   }
+  if (pr?.automerge_method) {
+    validateAutomergeMethod(pr?.automerge_method);
+  }
   if (
     pr.base ||
     pr.body ||
-    pr.labels.length > 0 ||
-    pr.assignees.length > 0 ||
-    pr.reviewers.length > 0 ||
-    pr.team_reviewers.length > 0 ||
+    pr.labels?.length ||
+    pr.assignees?.length ||
+    pr.reviewers?.length ||
+    pr.team_reviewers?.length ||
     pr.draft ||
     pr.comment ||
     pr.milestone_number ||
     pr.project ||
     pr.automerge_method
   ) {
-    throw new Error("pull_request_title is required to create a pull request");
+    throw new Error("title is required to create a pull request");
   }
 };
 
