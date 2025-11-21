@@ -4,7 +4,6 @@ import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 import * as github from "@actions/github";
 import { DefaultArtifactClient } from "@actions/artifact";
-import { z } from "zod";
 import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import { newName } from "@csm-actions/label";
 
@@ -20,27 +19,24 @@ const nowS = (): string => {
   return `${yyyy}${mm}${dd}${hh}${min}${ss}`;
 };
 
-export const PullRequest = z.object({
-  title: z.string(),
-  body: z.string(),
-  base: z.string(),
-  labels: z.array(z.string()),
-  assignees: z.array(z.string()),
-  reviewers: z.array(z.string()),
-  team_reviewers: z.array(z.string()),
-  draft: z.boolean(),
-  comment: z.string(),
-  automerge_method: z.optional(z.enum(["merge", "squash", "rebase"])),
-  project: z.nullable(
-    z.object({
-      number: z.number(),
-      owner: z.string(),
-      id: z.optional(z.string()),
-    }),
-  ),
-  milestone_number: z.optional(z.number()),
-});
-export type PullRequest = z.infer<typeof PullRequest>;
+type PullRequest = {
+  title: string;
+  body: string;
+  base: string;
+  labels: string[];
+  assignees: string[];
+  reviewers: string[];
+  team_reviewers: string[];
+  draft: boolean;
+  comment: string;
+  automerge_method?: "merge" | "squash" | "rebase";
+  project: {
+    number: number;
+    owner: string;
+    id?: string;
+  } | null;
+  milestone_number?: number;
+};
 
 type Inputs = {
   appId: string;

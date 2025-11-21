@@ -16,7 +16,6 @@
     "@actions/exec": "npm:@actions/exec@^1.1.1",
     "@actions/github": "npm:@actions/github@^6.0.1",
     "@csm-actions/label": "jsr:@csm-actions/label@^0.0.1",
-    "@suzuki-shunsuke/github-app-token": "jsr:@suzuki-shunsuke/github-app-token@^0.0.3",
-    "zod": "npm:zod@^4.1.12"
+    "@suzuki-shunsuke/github-app-token": "jsr:@suzuki-shunsuke/github-app-token@^0.0.3"
   }
 }
