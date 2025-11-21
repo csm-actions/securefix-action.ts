@@ -99,7 +99,10 @@ export const request = async (inputs: Inputs): Promise<Result> => {
       changedFilesFromRootDir: [],
     };
   }
-  const filteredFixedFilesFromRootDir = filterFiles(fixedFilesFromRootDir, inputs.files);
+  const filteredFixedFilesFromRootDir = filterFiles(
+    fixedFilesFromRootDir,
+    inputs.files,
+  );
   if (filteredFixedFilesFromRootDir.length === 0) {
     core.notice("No changes");
     return {
@@ -115,7 +118,9 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     filteredFixedFilesFromRootDir.join("\n") + "\n",
   );
 
-  const fixedFiles = filteredFixedFilesFromRootDir.map((file) => path.join(inputs.rootDir, file));
+  const fixedFiles = filteredFixedFilesFromRootDir.map((file) =>
+    path.join(inputs.rootDir, file)
+  );
 
   // upload artifact
   const artifact = new DefaultArtifactClient();
@@ -172,9 +177,7 @@ const filterFiles = (
   if (files.size === 0) {
     return [...fixedFiles];
   }
-  return [...files].filter((file) =>
-    fixedFiles.has(file)
-  );
+  return [...files].filter((file) => fixedFiles.has(file));
 };
 
 const createLabel = async (
