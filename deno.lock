@@ -9,7 +9,8 @@
     "npm:@actions/github@^6.0.1": "6.0.1_@octokit+core@5.2.2",
     "npm:@octokit/auth-app@^8.1.2": "8.1.2",
     "npm:@octokit/plugin-rest-endpoint-methods@17": "17.0.0_@octokit+core@7.0.6",
-    "npm:@octokit/rest@^22.0.1": "22.0.1_@octokit+core@7.0.6"
+    "npm:@octokit/rest@^22.0.1": "22.0.1_@octokit+core@7.0.6",
+    "npm:@types/node@*": "24.2.0"
   },
   "jsr": {
     "@csm-actions/label@0.0.1": {
