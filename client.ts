@@ -29,7 +29,7 @@ type PullRequest = {
   team_reviewers: string[];
   draft: boolean;
   comment: string;
-  automerge_method?: "merge" | "squash" | "rebase";
+  automerge_method: string;
   project: {
     number: number;
     owner: string;
@@ -61,6 +61,17 @@ type Result = {
   changedFilesFromRootDir: string[];
 };
 
+type AutomergeMethod = "" | "merge" | "squash" | "rebase";
+
+const validateAutomergeMethod = (method: string): AutomergeMethod => {
+  if (!["", "merge", "squash", "rebase"].includes(method)) {
+    throw new Error(
+      'automerge_method must be one of "", "merge", "squash", or "rebase"',
+    );
+  }
+  return method as AutomergeMethod;
+};
+
 const generateArtifactName = (): string => {
   return newName(`securefix-${nowS()}-`);
 };
@@ -84,6 +95,7 @@ const listFixedFiles = async (rootDir: string): Promise<Set<string>> => {
 };
 
 export const request = async (inputs: Inputs): Promise<Result> => {
+  validateAutomergeMethod(inputs.pr.automerge_method);
   validatePR(inputs.pr);
   const artifactName = generateArtifactName();
   const fixedFilesFromRootDir = await listFixedFiles(inputs.rootDir);
