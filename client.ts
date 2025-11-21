@@ -7,7 +7,6 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import { z } from "zod";
 import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import { newName } from "@csm-actions/label";
-import process from "node:process";
 
 const nowS = (): string => {
   const date = new Date();
@@ -31,7 +30,7 @@ export const PullRequest = z.object({
   team_reviewers: z.array(z.string()),
   draft: z.boolean(),
   comment: z.string(),
-  automerge_method: z.optional(z.string()),
+  automerge_method: z.optional(z.enum(["merge", "squash", "rebase"])),
   project: z.nullable(
     z.object({
       number: z.number(),
@@ -46,14 +45,18 @@ export type PullRequest = z.infer<typeof PullRequest>;
 type Inputs = {
   appId: string;
   privateKey: string;
+  // rootDir is a path to the root directory.
+  // It must be a relative path from a git root directory.
   rootDir: string;
   serverRepository: string;
   repo: string;
   branch: string;
   failIfChanges: boolean;
+  // files is a set of file paths from rootDir
   files: Set<string>;
   pr: PullRequest;
   commitMessage: string;
+  workspace: string;
 };
 
 type Result = {
@@ -62,28 +65,42 @@ type Result = {
   changedFilesFromRootDir: string[];
 };
 
-export const action = async (inputs: Inputs): Promise<Result> => {
-  validateAutomergeMethod(inputs.pr.automerge_method ?? "");
-  validatePR(inputs.pr);
-  // Generate artifact name
-  const n = nowS();
-  const prefix = `securefix-${n}-`;
-  const artifactName = newName(prefix);
+const generateArtifactName = (): string => {
+  return newName(`securefix-${nowS()}-`);
+};
+
+const listFixedFiles = async (rootDir: string): Promise<Set<string>> => {
+  // fixedFiles is a set of file paths from rootDir
   // List fixed files
   const result = await exec.getExecOutput(
     "git",
     ["ls-files", "--modified", "--others", "--exclude-standard"],
     {
-      cwd: inputs.rootDir || undefined,
+      cwd: rootDir || undefined,
     },
   );
-  const fixedFiles = new Set(
+  return new Set(
     result.stdout
       .trim()
       .split("\n")
       .filter((file) => file.length > 0),
   );
-  if (fixedFiles.size === 0) {
+};
+
+export const request = async (inputs: Inputs): Promise<Result> => {
+  validatePR(inputs.pr);
+  const artifactName = generateArtifactName();
+  const fixedFilesFromRootDir = await listFixedFiles(inputs.rootDir);
+  if (fixedFilesFromRootDir.size === 0) {
+    core.notice("No changes");
+    return {
+      artifactName,
+      changedFiles: [],
+      changedFilesFromRootDir: [],
+    };
+  }
+  const filteredFixedFilesFromRootDir = filterFiles(fixedFilesFromRootDir, inputs.files);
+  if (filteredFixedFilesFromRootDir.length === 0) {
     core.notice("No changes");
     return {
       artifactName,
@@ -92,31 +109,25 @@ export const action = async (inputs: Inputs): Promise<Result> => {
     };
   }
 
-  const files = getFiles(fixedFiles, artifactName, inputs.rootDir, inputs);
-
   createMetadataFile(artifactName, inputs);
-  if (files.changedFiles) {
-    if (files.changedFilesFromRootDir) {
-      fs.writeFileSync(
-        `${artifactName}_files.txt`,
-        files.changedFilesFromRootDir.join("\n") + "\n",
-      );
-    }
-  }
+  fs.writeFileSync(
+    `${artifactName}_files.txt`,
+    filteredFixedFilesFromRootDir.join("\n") + "\n",
+  );
 
-  if (files.changedFiles && files.changedFiles.length > 0) {
-    // upload artifact
-    const artifact = new DefaultArtifactClient();
-    await artifact.uploadArtifact(
-      artifactName,
-      (files.changedFiles || []).concat(
-        `${artifactName}.json`,
-        `${artifactName}_files.txt`,
-      ),
-      process.env.GITHUB_WORKSPACE || "",
-    );
-    fs.rmSync(`${artifactName}_files.txt`);
-  }
+  const fixedFiles = filteredFixedFilesFromRootDir.map((file) => path.join(inputs.rootDir, file));
+
+  // upload artifact
+  const artifact = new DefaultArtifactClient();
+  await artifact.uploadArtifact(
+    artifactName,
+    fixedFiles.concat(
+      `${artifactName}.json`,
+      `${artifactName}_files.txt`,
+    ),
+    inputs.workspace,
+  );
+  fs.rmSync(`${artifactName}_files.txt`);
   fs.rmSync(`${artifactName}.json`);
   await createLabel(
     {
@@ -131,23 +142,21 @@ export const action = async (inputs: Inputs): Promise<Result> => {
     artifactName,
     `${github.context.repo.owner}/${github.context.repo.repo}/${github.context.runId}`,
   );
-  if (files.changedFiles && files.changedFiles.length > 0) {
-    if (inputs.failIfChanges || (!inputs.repo && !inputs.branch)) {
-      core.setFailed("Changes detected. A commit will be pushed");
-      core.info(files.changedFiles.join("\n"));
-      return {
-        artifactName,
-        changedFiles: files.changedFiles || [],
-        changedFilesFromRootDir: files.changedFilesFromRootDir || [],
-      };
-    }
-    core.notice("Changes detected. A commit will be pushed");
-    core.info(files.changedFiles.join("\n"));
+  if (inputs.failIfChanges || (!inputs.repo && !inputs.branch)) {
+    core.setFailed("Changes detected. A commit will be pushed");
+    core.info(fixedFiles.join("\n"));
+    return {
+      artifactName,
+      changedFiles: fixedFiles || [],
+      changedFilesFromRootDir: filteredFixedFilesFromRootDir,
+    };
   }
+  core.notice("Changes detected. A commit will be pushed");
+  core.info(fixedFiles.join("\n"));
   return {
     artifactName,
-    changedFiles: files.changedFiles || [],
-    changedFilesFromRootDir: files.changedFilesFromRootDir || [],
+    changedFiles: fixedFiles || [],
+    changedFilesFromRootDir: filteredFixedFilesFromRootDir || [],
   };
 };
 
@@ -156,34 +165,16 @@ type Files = {
   changedFiles?: string[];
 };
 
-const getFiles = (
+const filterFiles = (
   fixedFiles: Set<string>,
-  artifactName: string,
-  rootDir: string,
-  inputs: Inputs,
-): Files => {
-  if (fixedFiles.size === 0) {
-    core.notice("No changes");
-    return {};
+  files: Set<string>,
+): string[] => {
+  if (files.size === 0) {
+    return [...fixedFiles];
   }
-  createMetadataFile(artifactName, inputs);
-  if (inputs.files.size === 0) {
-    return {
-      changedFilesFromRootDir: [...fixedFiles],
-      changedFiles: [...fixedFiles].map((file) => path.join(rootDir, file)),
-    };
-  }
-  const filteredFiles = [...inputs.files].filter((file) =>
-    fixedFiles.has(file),
+  return [...files].filter((file) =>
+    fixedFiles.has(file)
   );
-  if (filteredFiles.length === 0) {
-    core.notice("No changes");
-    return {};
-  }
-  return {
-    changedFilesFromRootDir: filteredFiles,
-    changedFiles: filteredFiles.map((file) => path.join(rootDir, file)),
-  };
 };
 
 const createLabel = async (
@@ -208,14 +199,6 @@ const createLabel = async (
     core.info("Revoking GitHub App token");
     await githubAppToken.revoke(token.token);
     throw error;
-  }
-};
-
-const validateAutomergeMethod = (method: string) => {
-  if (!["", "merge", "squash", "rebase"].includes(method)) {
-    throw new Error(
-      'automerge_method must be one of "", "merge", "squash", or "rebase"',
-    );
   }
 };
 
