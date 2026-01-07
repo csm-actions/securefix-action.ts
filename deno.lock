@@ -1,7 +1,7 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@csm-actions/label@^0.0.1": "0.0.1",
+    "jsr:@csm-actions/label@^0.0.4": "0.0.4",
     "jsr:@suzuki-shunsuke/github-app-token@^0.0.3": "0.0.3",
     "npm:@actions/artifact@4": "4.0.0_@octokit+core@5.2.2",
     "npm:@actions/core@^1.11.1": "1.11.1",
@@ -13,8 +13,13 @@
     "npm:@types/node@*": "24.2.0"
   },
   "jsr": {
-    "@csm-actions/label@0.0.1": {
-      "integrity": "a14164c294abc39dbd47f0a7733b6ca8f7565f3509f3623a00e320d4f1dc561e"
+    "@csm-actions/label@0.0.4": {
+      "integrity": "7c72663e6c5ce44678b7bb4b2c589309d102a18f3878e5457f8a64e2d8fdad1e",
+      "dependencies": [
+        "jsr:@suzuki-shunsuke/github-app-token",
+        "npm:@actions/core",
+        "npm:@actions/github"
+      ]
     },
     "@suzuki-shunsuke/github-app-token@0.0.3": {
       "integrity": "82a7b1bf24f72496f4c2f031ef3dcb58d4826b9b96a7d4c6360d957e01d37680",
@@ -1231,7 +1236,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@csm-actions/label@^0.0.1",
+      "jsr:@csm-actions/label@^0.0.4",
       "jsr:@suzuki-shunsuke/github-app-token@^0.0.3",
       "npm:@actions/artifact@4",
       "npm:@actions/core@^1.11.1",

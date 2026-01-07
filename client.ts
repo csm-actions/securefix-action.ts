@@ -7,18 +7,6 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import { newName } from "@csm-actions/label";
 
-const nowS = (): string => {
-  const date = new Date();
-  const pad = (n: number): string => n.toString().padStart(2, "0");
-  const yyyy = date.getFullYear();
-  const mm = pad(date.getMonth() + 1);
-  const dd = pad(date.getDate());
-  const hh = pad(date.getHours());
-  const min = pad(date.getMinutes());
-  const ss = pad(date.getSeconds());
-  return `${yyyy}${mm}${dd}${hh}${min}${ss}`;
-};
-
 type PullRequest = {
   title: string;
   body?: string;
@@ -48,7 +36,7 @@ type Inputs = {
   repo?: string;
   branch?: string;
   failIfChanges?: boolean;
-  // files is a set of file paths from rootDir
+  // files is a set of relative file paths from rootDir to fixed files.
   files?: Set<string>;
   pr?: PullRequest;
   commitMessage: string;
@@ -73,12 +61,13 @@ const validateAutomergeMethod = (method: string): AutomergeMethod => {
 };
 
 const generateArtifactName = (): string => {
-  return newName(`securefix-${nowS()}-`);
+  return newName("securefix-");
 };
 
+/**
+ * listFixedFiles returns a set of relative file paths from rootDir to fixed files.
+ */
 const listFixedFiles = async (rootDir: string): Promise<Set<string>> => {
-  // fixedFiles is a set of file paths from rootDir
-  // List fixed files
   const result = await exec.getExecOutput(
     "git",
     ["ls-files", "--modified", "--others", "--exclude-standard"],
@@ -172,11 +161,6 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     changedFiles: fixedFiles || [],
     changedFilesFromRootDir: filteredFixedFilesFromRootDir || [],
   };
-};
-
-type Files = {
-  changedFilesFromRootDir?: string[];
-  changedFiles?: string[];
 };
 
 const filterFiles = (
