@@ -109,10 +109,12 @@ export const request = async (inputs: Inputs): Promise<Result> => {
       changedFilesFromRootDir: [],
     };
   }
+  const txtPath = path.join(inputs.rootDir ?? "", `${artifactName}_files.txt`);
+  const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
-  createMetadataFile(artifactName, inputs);
+  createMetadataFile(inputs, jsonPath);
   fs.writeFileSync(
-    `${artifactName}_files.txt`,
+    txtPath,
     [...fixedFilesFromRootDir].join("\n") + "\n",
   );
 
@@ -125,13 +127,13 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   await artifact.uploadArtifact(
     artifactName,
     fixedFiles.concat(
-      `${artifactName}.json`,
-      `${artifactName}_files.txt`,
+      jsonPath,
+      txtPath,
     ),
     path.join(inputs.workspace, inputs.rootDir ?? ""),
   );
-  fs.rmSync(`${artifactName}_files.txt`);
-  fs.rmSync(`${artifactName}.json`);
+  fs.rmSync(txtPath);
+  fs.rmSync(jsonPath);
   await createLabel(
     {
       appId: inputs.appId,
@@ -207,7 +209,7 @@ const validatePR = (pr: PullRequest) => {
   }
 };
 
-const createMetadataFile = (labelName: string, inputs: Inputs) => {
+const createMetadataFile = (inputs: Inputs, filePath: string) => {
   const value = {
     context: github.context,
     inputs: {
@@ -218,5 +220,8 @@ const createMetadataFile = (labelName: string, inputs: Inputs) => {
       pull_request: inputs.pr,
     },
   };
-  fs.writeFileSync(`${labelName}.json`, JSON.stringify(value, null, 2) + "\n");
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify(value, null, 2) + "\n",
+  );
 };

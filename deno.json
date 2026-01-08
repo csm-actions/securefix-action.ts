@@ -1,7 +1,7 @@
 {
   "name": "@csm-actions/securefix-action",
   "tasks": {},
-  "version": "0.1.1",
+  "version": "0.1.2",
   "exports": "./client.ts",
   "publish": {
     "include": [
