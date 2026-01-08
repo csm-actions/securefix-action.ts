@@ -68,10 +68,15 @@ const generateArtifactName = (): string => {
 /**
  * listFixedFiles returns a set of relative file paths from rootDir to fixed files.
  */
-const listFixedFiles = async (rootDir: string, files: Set<string>): Promise<Set<string>> => {
+const listFixedFiles = async (
+  rootDir: string,
+  files: Set<string>,
+): Promise<Set<string>> => {
   const result = await exec.getExecOutput(
     "git",
-    ["ls-files", "--modified", "--others", "--exclude-standard"].concat([...files]),
+    ["ls-files", "--modified", "--others", "--exclude-standard"].concat([
+      ...files,
+    ]),
     {
       cwd: rootDir || undefined,
     },
