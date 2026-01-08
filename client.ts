@@ -128,7 +128,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
       `${artifactName}.json`,
       `${artifactName}_files.txt`,
     ),
-    inputs.workspace,
+    path.join(inputs.workspace, inputs.rootDir ?? ""),
   );
   fs.rmSync(`${artifactName}_files.txt`);
   fs.rmSync(`${artifactName}.json`);
