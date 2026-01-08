@@ -68,10 +68,10 @@ const generateArtifactName = (): string => {
 /**
  * listFixedFiles returns a set of relative file paths from rootDir to fixed files.
  */
-const listFixedFiles = async (rootDir: string): Promise<Set<string>> => {
+const listFixedFiles = async (rootDir: string, files: Set<string>): Promise<Set<string>> => {
   const result = await exec.getExecOutput(
     "git",
-    ["ls-files", "--modified", "--others", "--exclude-standard"],
+    ["ls-files", "--modified", "--others", "--exclude-standard"].concat([...files]),
     {
       cwd: rootDir || undefined,
     },
@@ -95,20 +95,8 @@ export const request = async (inputs: Inputs): Promise<Result> => {
 
   const fixedFilesFromRootDir = inputs.useGit === false
     ? inputs.files!
-    : await listFixedFiles(inputs.rootDir ?? "");
+    : await listFixedFiles(inputs.rootDir ?? "", inputs.files ?? new Set());
   if (fixedFilesFromRootDir.size === 0) {
-    core.notice("No changes");
-    return {
-      artifactName,
-      changedFiles: [],
-      changedFilesFromRootDir: [],
-    };
-  }
-
-  const filteredFixedFilesFromRootDir = inputs.useGit === false
-    ? [...fixedFilesFromRootDir]
-    : filterFiles(fixedFilesFromRootDir, inputs.files);
-  if (filteredFixedFilesFromRootDir.length === 0) {
     core.notice("No changes");
     return {
       artifactName,
@@ -120,10 +108,10 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   createMetadataFile(artifactName, inputs);
   fs.writeFileSync(
     `${artifactName}_files.txt`,
-    filteredFixedFilesFromRootDir.join("\n") + "\n",
+    [...fixedFilesFromRootDir].join("\n") + "\n",
   );
 
-  const fixedFiles = filteredFixedFilesFromRootDir.map((file) =>
+  const fixedFiles = [...fixedFilesFromRootDir].map((file) =>
     path.join(inputs.rootDir ?? "", file)
   );
 
@@ -154,30 +142,15 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   );
   if (inputs.failIfChanges || (!inputs.repo && !inputs.branch)) {
     core.setFailed("Changes detected. A commit will be pushed");
-    core.info(fixedFiles.join("\n"));
-    return {
-      artifactName,
-      changedFiles: fixedFiles || [],
-      changedFilesFromRootDir: filteredFixedFilesFromRootDir,
-    };
+  } else {
+    core.notice("Changes detected. A commit will be pushed");
   }
-  core.notice("Changes detected. A commit will be pushed");
   core.info(fixedFiles.join("\n"));
   return {
     artifactName,
     changedFiles: fixedFiles || [],
-    changedFilesFromRootDir: filteredFixedFilesFromRootDir || [],
+    changedFilesFromRootDir: [...fixedFilesFromRootDir],
   };
-};
-
-const filterFiles = (
-  fixedFiles: Set<string>,
-  files?: Set<string>,
-): string[] => {
-  if (!files?.size) {
-    return [...fixedFiles];
-  }
-  return [...files].filter((file) => fixedFiles.has(file));
 };
 
 const createLabel = async (
