@@ -41,6 +41,7 @@ type Inputs = {
   pr?: PullRequest;
   commitMessage: string;
   workspace: string;
+  useGit?: boolean;
 };
 
 type Result = {
@@ -87,8 +88,14 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   if (inputs.pr) {
     validatePR(inputs.pr);
   }
+  if (inputs.useGit === false && (!inputs.files || inputs.files.size === 0)) {
+    throw new Error("files is required when useGit is false");
+  }
   const artifactName = generateArtifactName();
-  const fixedFilesFromRootDir = await listFixedFiles(inputs.rootDir ?? "");
+
+  const fixedFilesFromRootDir = inputs.useGit === false
+    ? inputs.files!
+    : await listFixedFiles(inputs.rootDir ?? "");
   if (fixedFilesFromRootDir.size === 0) {
     core.notice("No changes");
     return {
@@ -97,10 +104,10 @@ export const request = async (inputs: Inputs): Promise<Result> => {
       changedFilesFromRootDir: [],
     };
   }
-  const filteredFixedFilesFromRootDir = filterFiles(
-    fixedFilesFromRootDir,
-    inputs.files,
-  );
+
+  const filteredFixedFilesFromRootDir = inputs.useGit === false
+    ? [...fixedFilesFromRootDir]
+    : filterFiles(fixedFilesFromRootDir, inputs.files);
   if (filteredFixedFilesFromRootDir.length === 0) {
     core.notice("No changes");
     return {
