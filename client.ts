@@ -7,7 +7,7 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import { newName } from "@csm-actions/label";
 
-type PullRequest = {
+export type PullRequest = {
   title: string;
   body?: string;
   base: string;
@@ -26,7 +26,7 @@ type PullRequest = {
   milestone_number?: number;
 };
 
-type Inputs = {
+export type Inputs = {
   appId: string;
   privateKey: string;
   // rootDir is a path to the root directory.
@@ -44,7 +44,7 @@ type Inputs = {
   useGit?: boolean;
 };
 
-type Result = {
+export type Result = {
   artifactName: string;
   changedFiles: string[];
   changedFilesFromRootDir: string[];
@@ -113,10 +113,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
   createMetadataFile(inputs, jsonPath);
-  fs.writeFileSync(
-    txtPath,
-    [...fixedFilesFromRootDir].join("\n") + "\n",
-  );
+  fs.writeFileSync(txtPath, [...fixedFilesFromRootDir].join("\n") + "\n");
 
   const fixedFiles = [...fixedFilesFromRootDir].map((file) =>
     path.join(inputs.rootDir ?? "", file)
@@ -126,10 +123,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const artifact = new DefaultArtifactClient();
   await artifact.uploadArtifact(
     artifactName,
-    fixedFiles.concat(
-      jsonPath,
-      txtPath,
-    ),
+    fixedFiles.concat(jsonPath, txtPath),
     path.join(inputs.workspace, inputs.rootDir ?? ""),
   );
   fs.rmSync(txtPath);
@@ -220,8 +214,5 @@ const createMetadataFile = (inputs: Inputs, filePath: string) => {
       pull_request: inputs.pr,
     },
   };
-  fs.writeFileSync(
-    filePath,
-    JSON.stringify(value, null, 2) + "\n",
-  );
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
 };
