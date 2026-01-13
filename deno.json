@@ -1,14 +1,10 @@
 {
   "name": "@csm-actions/securefix-action",
   "tasks": {},
-  "version": "0.1.2",
+  "version": "0.1.3",
   "exports": "./client.ts",
   "publish": {
-    "include": [
-      "LICENSE",
-      "README.md",
-      "client.ts"
-    ]
+    "include": ["LICENSE", "README.md", "client.ts"]
   },
   "imports": {
     "@actions/artifact": "npm:@actions/artifact@^4.0.0",
