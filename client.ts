@@ -42,6 +42,7 @@ export type Inputs = {
   commitMessage: string;
   workspace: string;
   useGit?: boolean;
+  custom?: unknown;
 };
 
 export type Result = {
@@ -212,6 +213,7 @@ const createMetadataFile = (inputs: Inputs, filePath: string) => {
       commit_message: inputs.commitMessage,
       root_dir: inputs.rootDir,
       pull_request: inputs.pr,
+      custom: inputs.custom,
     },
   };
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
