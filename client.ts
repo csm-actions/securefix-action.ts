@@ -42,7 +42,7 @@ export type Inputs = {
   commitMessage: string;
   workspace: string;
   useGit?: boolean;
-  custom?: any;
+  custom?: unknown;
 };
 
 export type Result = {
