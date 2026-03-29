@@ -99,10 +99,9 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   }
   const artifactName = generateArtifactName();
 
-  const fixedFilesFromRootDir =
-    inputs.useGit === false
-      ? inputs.files!
-      : await listFixedFiles(inputs.rootDir ?? "", inputs.files ?? new Set());
+  const fixedFilesFromRootDir = inputs.useGit === false
+    ? inputs.files!
+    : await listFixedFiles(inputs.rootDir ?? "", inputs.files ?? new Set());
   if (fixedFilesFromRootDir.size === 0) {
     core.notice("No changes");
     return {
@@ -118,7 +117,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   fs.writeFileSync(txtPath, [...fixedFilesFromRootDir].join("\n") + "\n");
 
   const fixedFiles = [...fixedFilesFromRootDir].map((file) =>
-    path.join(inputs.rootDir ?? "", file),
+    path.join(inputs.rootDir ?? "", file)
   );
 
   // upload artifact
