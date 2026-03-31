@@ -120,11 +120,16 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     path.join(inputs.rootDir ?? "", file)
   );
 
+  // Exclude deleted files from upload (they are still listed in _files.txt)
+  const uploadFiles = fixedFiles.filter((file) =>
+    fs.existsSync(path.join(inputs.workspace, file))
+  );
+
   // upload artifact
   const artifact = new DefaultArtifactClient();
   await artifact.uploadArtifact(
     artifactName,
-    fixedFiles.concat(jsonPath, txtPath),
+    uploadFiles.concat(jsonPath, txtPath),
     path.join(inputs.workspace, inputs.rootDir ?? ""),
   );
   fs.rmSync(txtPath);
