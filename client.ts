@@ -99,10 +99,10 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   }
   const artifactName = generateArtifactName();
 
-  const fixedFilesFromRootDir = inputs.useGit === false
+  const allFixedFiles = inputs.useGit === false
     ? inputs.files!
     : await listFixedFiles(inputs.rootDir ?? "", inputs.files ?? new Set());
-  if (fixedFilesFromRootDir.size === 0) {
+  if (allFixedFiles.size === 0) {
     core.notice("No changes");
     return {
       artifactName,
@@ -110,10 +110,44 @@ export const request = async (inputs: Inputs): Promise<Result> => {
       changedFilesFromRootDir: [],
     };
   }
+
+  // Separate submodule paths from regular files
+  const submodules: Array<{ path: string; sha: string }> = [];
+  const fixedFilesFromRootDir = new Set<string>();
+  for (const file of allFixedFiles) {
+    const fullPath = path.join(
+      inputs.workspace,
+      inputs.rootDir ?? "",
+      file,
+    );
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
+      const result = await exec.getExecOutput(
+        "git",
+        ["-C", fullPath, "rev-parse", "HEAD"],
+      );
+      const sha = result.stdout.trim();
+      if (sha) {
+        core.info(`Detected submodule: ${file} (${sha})`);
+        submodules.push({ path: file, sha });
+      }
+    } else {
+      fixedFilesFromRootDir.add(file);
+    }
+  }
+
+  if (fixedFilesFromRootDir.size === 0 && submodules.length === 0) {
+    core.notice("No changes");
+    return {
+      artifactName,
+      changedFiles: [],
+      changedFilesFromRootDir: [],
+    };
+  }
+
   const txtPath = path.join(inputs.rootDir ?? "", `${artifactName}_files.txt`);
   const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
-  createMetadataFile(inputs, jsonPath);
+  createMetadataFile(inputs, submodules, jsonPath);
   fs.writeFileSync(txtPath, [...fixedFilesFromRootDir].join("\n") + "\n");
 
   const fixedFiles = [...fixedFilesFromRootDir].map((file) =>
@@ -209,7 +243,11 @@ const validatePR = (pr: PullRequest) => {
   }
 };
 
-const createMetadataFile = (inputs: Inputs, filePath: string) => {
+const createMetadataFile = (
+  inputs: Inputs,
+  submodules: Array<{ path: string; sha: string }>,
+  filePath: string,
+) => {
   const value = {
     context: github.context,
     inputs: {
@@ -219,6 +257,7 @@ const createMetadataFile = (inputs: Inputs, filePath: string) => {
       root_dir: inputs.rootDir,
       pull_request: inputs.pr,
       custom: inputs.custom,
+      submodules: submodules.length > 0 ? submodules : undefined,
     },
   };
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
