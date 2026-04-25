@@ -8,6 +8,7 @@
     "npm:@actions/exec@3": "3.0.0",
     "npm:@actions/github@^9.1.1": "9.1.1",
     "npm:@octokit/auth-app@^8.2.0": "8.2.0",
+    "npm:@octokit/plugin-rest-endpoint-methods@17": "17.0.0_@octokit+core@7.0.6",
     "npm:@octokit/rest@^22.0.1": "22.0.1",
     "npm:@types/node@*": "24.2.0"
   },
@@ -24,6 +25,7 @@
       "integrity": "8e0a55c23b08fa7d7b6905768e63ff11904ebce674c1fdfd959c2a6ce20dc702",
       "dependencies": [
         "npm:@octokit/auth-app",
+        "npm:@octokit/plugin-rest-endpoint-methods",
         "npm:@octokit/rest"
       ]
     }
