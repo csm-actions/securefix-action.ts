@@ -1,13 +1,11 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@csm-actions/label@^0.0.7": "0.0.7",
+    "jsr:@csm-actions/label@^0.0.8": "0.0.8",
     "jsr:@suzuki-shunsuke/github-app-token@^0.0.4": "0.0.4",
     "npm:@actions/artifact@^6.2.1": "6.2.1",
-    "npm:@actions/core@3": "3.0.1",
     "npm:@actions/core@^3.0.1": "3.0.1",
     "npm:@actions/exec@3": "3.0.0",
-    "npm:@actions/github@9": "9.1.1",
     "npm:@actions/github@^9.1.1": "9.1.1",
     "npm:@octokit/auth-app@^8.2.0": "8.2.0",
     "npm:@octokit/plugin-rest-endpoint-methods@17": "17.0.0_@octokit+core@7.0.6",
@@ -15,12 +13,12 @@
     "npm:@types/node@*": "24.2.0"
   },
   "jsr": {
-    "@csm-actions/label@0.0.7": {
-      "integrity": "b76fd3c6d75233829c276a69997c8d24f841f9114fd27b7ed1a00b9135aab1f3",
+    "@csm-actions/label@0.0.8": {
+      "integrity": "457619bdf76c44cc701c82274d66db6ad650fa4d785e139ac8d6a721e2f3f105",
       "dependencies": [
         "jsr:@suzuki-shunsuke/github-app-token",
-        "npm:@actions/core@3",
-        "npm:@actions/github@9"
+        "npm:@actions/core",
+        "npm:@actions/github"
       ]
     },
     "@suzuki-shunsuke/github-app-token@0.0.4": {
@@ -994,7 +992,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@csm-actions/label@^0.0.7",
+      "jsr:@csm-actions/label@^0.0.8",
       "jsr:@suzuki-shunsuke/github-app-token@^0.0.4",
       "npm:@actions/artifact@^6.2.1",
       "npm:@actions/core@^3.0.1",
