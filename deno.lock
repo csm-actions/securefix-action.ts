@@ -7,7 +7,7 @@
     "npm:@actions/core@^3.0.1": "3.0.1",
     "npm:@actions/exec@3": "3.0.0",
     "npm:@actions/github@^9.1.1": "9.1.1",
-    "npm:@octokit/auth-app@^8.2.0": "8.2.0",
+    "npm:@octokit/auth-app@^8.2.0": "8.3.0",
     "npm:@octokit/plugin-rest-endpoint-methods@17": "17.0.0_@octokit+core@7.0.7",
     "npm:@octokit/rest@^22.0.1": "22.0.1"
   },
@@ -199,8 +199,8 @@
         "tslib"
       ]
     },
-    "@azure/storage-common@12.4.1_@azure+core-client@1.11.0": {
-      "integrity": "sha512-t14unw/WofGDUi7TKJrsyXyPsN+NLgRm7hMaq0llxNmTIzt7f257+6LE6FKIJPh88zLj6M7LPvzve0fEYg/L3A==",
+    "@azure/storage-common@12.5.0_@azure+core-client@1.11.0": {
+      "integrity": "sha512-bttzuhQiCIwrkzjPDA+AtAR7dg19L/CC6ztcqJ5LfvWpXuys9mHp0UQ0udYnoUvv9SCT9KTR5kqFvFr0e6k0lQ==",
       "dependencies": [
         "@azure/abort-controller",
         "@azure/core-auth",
@@ -238,14 +238,14 @@
     "@nodable/entities@3.0.0": {
       "integrity": "sha512-8L9xFeTYKhm49xfIypoe2W5wV1m/3Z58kT+7kR9A8OyFxcPduI4VmxaUMQyKYrRjUoLLSXv6EKKID5Tvj9cUVw=="
     },
-    "@octokit/auth-app@8.2.0": {
-      "integrity": "sha512-vVjdtQQwomrZ4V46B9LaCsxsySxGoHsyw6IYBov/TqJVROrlYdyNgw5q6tQbB7KZt53v1l1W53RiqTvpzL907g==",
+    "@octokit/auth-app@8.3.0": {
+      "integrity": "sha512-/UaKmJCsOc5XBZwhnFiGNdLH/FkDF8lYtBn1QlKxtX7IpgaRB/XOXjixFtERAknyUZHxp3oDuoiG0En4VptJSg==",
       "dependencies": [
         "@octokit/auth-oauth-app",
         "@octokit/auth-oauth-user",
         "@octokit/request",
         "@octokit/request-error",
-        "@octokit/types@16.0.0",
+        "@octokit/types@17.0.0",
         "toad-cache",
         "universal-github-app-jwt",
         "universal-user-agent"
@@ -295,10 +295,10 @@
         "universal-user-agent"
       ]
     },
-    "@octokit/endpoint@11.0.3": {
-      "integrity": "sha512-FWFlNxghg4HrXkD3ifYbS/IdL/mDHjh9QcsNyhQjN8dplUoZbejsdpmuqdA76nxj2xoWPs7p8uX2SNr9rYu0Ag==",
+    "@octokit/endpoint@11.0.4": {
+      "integrity": "sha512-f1cOWoHPmxryJFknxbtDdjODWfV8A9tc8Aae6ermXPNgHFZ/x91AtHIz4gicEjL8hkJiip+u21QHJORfBv/qiA==",
       "dependencies": [
-        "@octokit/types@16.0.0",
+        "@octokit/types@17.0.0",
         "universal-user-agent"
       ]
     },
@@ -501,8 +501,8 @@
     "bare-events@2.9.1": {
       "integrity": "sha512-Z0oHEHAFDZkffN8Qc39zNZjQlMDkPJRyyyZieU1VH7u8c5S+qHZ2S8ixdKIAxEjfHO7FJxXmJWgteOghVanIsg=="
     },
-    "bare-fs@4.7.4": {
-      "integrity": "sha512-y1kC+ffIx/tPLdTE693uNjHfzTfr+ravR5tvWlMXe25nELbkqV400S71qHDwbkAQ1FVEZobB1NFRzFbCCcyBCQ==",
+    "bare-fs@4.8.0": {
+      "integrity": "sha512-fM+MhCvdQhZ7NV6S95a07gPSqjIYKn6mFaXfx266wN3ajZGl/+1AzH+ubkXQ0fFZvOe2nk9VHkzdYkQE5zMV3Q==",
       "dependencies": [
         "bare-events",
         "bare-path",
@@ -526,8 +526,8 @@
         "bare-events"
       ]
     },
-    "bare-url@2.4.6": {
-      "integrity": "sha512-iQxPClE07hETVpbRoX7JXX3v/ZQViCxe/SYCxylRLzdEx1xJAufPptfiOqR8tqiCtmbtMDANKWszzjLu1PMAZQ==",
+    "bare-url@2.5.1": {
+      "integrity": "sha512-cD5ciQuKlx+eumTCfqbfiL+fhQm+dHbVNB/cX4+d+I/nx4JsVop9VoFEPAs5RJ6I84QR6bZIBjpd2kjDOYeWcg==",
       "dependencies": [
         "bare-path"
       ]
