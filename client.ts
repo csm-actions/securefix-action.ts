@@ -27,8 +27,15 @@ export type PullRequest = {
 };
 
 export type Inputs = {
-  appId: string;
-  privateKey: string;
+  /**
+   * An Octokit client authenticated as a GitHub App.
+   *
+   * It's used to create an installation access token for the server
+   * repository, which is revoked once the label is created.
+   * Build it with @octokit/auth-app, passing either a private key or a
+   * createJwt callback when the key is stored in a KMS or a HSM.
+   */
+  appOctokit: githubAppToken.Client;
   // rootDir is a path to the root directory.
   // It must be a relative path from a git root directory.
   rootDir?: string;
@@ -169,15 +176,9 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   fs.rmSync(txtPath);
   fs.rmSync(jsonPath);
   await createLabel(
-    {
-      appId: inputs.appId,
-      privateKey: inputs.privateKey,
-      owner: github.context.repo.owner,
-      repositories: [inputs.serverRepository],
-      permissions: {
-        issues: "write",
-      },
-    },
+    inputs.appOctokit,
+    github.context.repo.owner,
+    inputs.serverRepository,
     artifactName,
     `${github.context.repo.owner}/${github.context.repo.repo}/${github.context.runId}`,
   );
@@ -195,27 +196,38 @@ export const request = async (inputs: Inputs): Promise<Result> => {
 };
 
 const createLabel = async (
-  inputs: githubAppToken.Inputs,
+  appOctokit: githubAppToken.Client,
+  owner: string,
+  repo: string,
   labelName: string,
   description: string,
 ) => {
-  const token = await githubAppToken.create(inputs);
+  const token = await githubAppToken.create({
+    octokit: appOctokit,
+    owner: owner,
+    repositories: [repo],
+    permissions: {
+      issues: "write",
+    },
+  });
+  // Without this the token would appear in the workflow log.
+  core.setSecret(token.token);
   try {
     const octokit = github.getOctokit(token.token);
     await octokit.rest.issues.createLabel({
-      owner: inputs.owner,
-      repo: inputs.repositories ? inputs.repositories[0] : "",
+      owner: owner,
+      repo: repo,
       name: labelName,
       description: description,
     });
-  } catch (error) {
+  } finally {
+    // The label is created, so the token has done its job either way.
     if (githubAppToken.hasExpired(token.expiresAt)) {
       core.info("GitHub App token has already expired");
-      return;
+    } else {
+      core.info("Revoking GitHub App token");
+      await githubAppToken.revoke(token.token);
     }
-    core.info("Revoking GitHub App token");
-    await githubAppToken.revoke(token.token);
-    throw error;
   }
 };
 
