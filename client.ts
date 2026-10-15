@@ -82,7 +82,7 @@ const listFixedFiles = async (
 ): Promise<Set<string>> => {
   const result = await exec.getExecOutput(
     "git",
-    ["ls-files", "--modified", "--others", "--exclude-standard"].concat([
+    ["ls-files", "-z", "--modified", "--others", "--exclude-standard"].concat([
       ...files,
     ]),
     {
@@ -90,10 +90,7 @@ const listFixedFiles = async (
     },
   );
   return new Set(
-    result.stdout
-      .trim()
-      .split("\n")
-      .filter((file) => file.length > 0),
+    result.stdout.split("\0").filter((file) => file.length > 0),
   );
 };
 
