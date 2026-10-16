@@ -6,6 +6,7 @@ import * as github from "@actions/github";
 import { DefaultArtifactClient } from "@actions/artifact";
 import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import { newName } from "@csm-actions/label";
+import { listFixedFiles } from "./list_fixed_files.ts";
 
 export type PullRequest = {
   title: string;
@@ -71,27 +72,6 @@ const validateAutomergeMethod = (method: string): AutomergeMethod => {
 
 const generateArtifactName = (): string => {
   return newName("securefix-");
-};
-
-/**
- * listFixedFiles returns a set of relative file paths from rootDir to fixed files.
- */
-const listFixedFiles = async (
-  rootDir: string,
-  files: Set<string>,
-): Promise<Set<string>> => {
-  const result = await exec.getExecOutput(
-    "git",
-    ["ls-files", "-z", "--modified", "--others", "--exclude-standard"].concat([
-      ...files,
-    ]),
-    {
-      cwd: rootDir || undefined,
-    },
-  );
-  return new Set(
-    result.stdout.split("\0").filter((file) => file.length > 0),
-  );
 };
 
 export const request = async (inputs: Inputs): Promise<Result> => {
