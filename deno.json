@@ -1,10 +1,17 @@
 {
   "name": "@csm-actions/securefix-action",
-  "tasks": {},
+  "tasks": {
+    "test": "deno test --allow-env --allow-read --allow-write --allow-run=git"
+  },
   "version": "0.2.0",
   "exports": "./client.ts",
   "publish": {
-    "include": ["LICENSE", "README.md", "client.ts"]
+    "include": [
+      "LICENSE",
+      "README.md",
+      "client.ts",
+      "list_fixed_files.ts"
+    ]
   },
   "imports": {
     "@actions/artifact": "npm:@actions/artifact@^6.2.1",
@@ -12,6 +19,7 @@
     "@actions/exec": "npm:@actions/exec@^3.0.0",
     "@actions/github": "npm:@actions/github@^9.1.1",
     "@csm-actions/label": "jsr:@csm-actions/label@^0.1.0",
-    "@suzuki-shunsuke/github-app-token": "jsr:@suzuki-shunsuke/github-app-token@^0.2.1"
+    "@suzuki-shunsuke/github-app-token": "jsr:@suzuki-shunsuke/github-app-token@^0.2.1",
+    "@std/assert": "jsr:@std/assert@^1.0.19"
   }
 }
