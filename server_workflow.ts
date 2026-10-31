@@ -8,7 +8,11 @@ export type WorkflowRef = {
   repo: string;
   /** The workflow file name, e.g. `securefix.yaml` */
   workflow: string;
-  /** A branch or tag name, or a full ref such as `refs/heads/main` */
+  /**
+   * A branch or tag name, or a full ref such as `refs/heads/main`.
+   * A commit SHA isn't allowed because the workflow_dispatch API doesn't
+   * accept it.
+   */
   ref: string;
 };
 
@@ -23,19 +27,30 @@ export type Server = {
   workflowRef?: WorkflowRef;
 };
 
+// The ref can contain "@" because git allows it in branch names,
+// but it can't contain whitespace.
 const workflowRefPattern =
-  /^([^/@]+)\/([^/@]+)\/\.github\/workflows\/([^/@]+)@(.+)$/;
+  /^([^/@\s]+)\/([^/@\s]+)\/\.github\/workflows\/([^/@\s]+\.ya?ml)@(\S+)$/;
+
+const commitSHAPattern = /^[0-9a-f]{40}$/i;
 
 /**
  * Parses a workflow ref in the format
  * `<owner>/<repo>/.github/workflows/<workflow file>@<ref>`,
- * the same format as `github.workflow_ref` and `uses` of reusable workflows.
+ * the same format as `github.workflow_ref`.
+ * Unlike `uses` of reusable workflows, the ref must be a branch or tag,
+ * not a commit SHA, because the workflow_dispatch API accepts only them.
  */
 export const parseWorkflowRef = (s: string): WorkflowRef => {
   const m = workflowRefPattern.exec(s);
   if (!m) {
     throw new Error(
-      `serverWorkflowRef must be in the format <owner>/<repo>/.github/workflows/<workflow file>@<ref>, got ${s}`,
+      `serverWorkflowRef must be in the format <owner>/<repo>/.github/workflows/<workflow file>@<branch or tag>, got ${s}`,
+    );
+  }
+  if (commitSHAPattern.test(m[4])) {
+    throw new Error(
+      `the ref of serverWorkflowRef must be a branch or tag, not a commit SHA, because the workflow_dispatch API doesn't accept it: ${s}`,
     );
   }
   return { owner: m[1], repo: m[2], workflow: m[3], ref: m[4] };
@@ -62,10 +77,11 @@ export const resolveServer = (
     return { owner: clientOwner, repo: serverRepository };
   }
   const workflowRef = parseWorkflowRef(serverWorkflowRef);
+  // GitHub owner and repository names are case-insensitive.
   if (
     serverRepository &&
-    (workflowRef.owner !== clientOwner ||
-      workflowRef.repo !== serverRepository)
+    (workflowRef.owner.toLowerCase() !== clientOwner.toLowerCase() ||
+      workflowRef.repo.toLowerCase() !== serverRepository.toLowerCase())
   ) {
     throw new Error(
       `serverRepository ${clientOwner}/${serverRepository} doesn't match the repository of serverWorkflowRef ${workflowRef.owner}/${workflowRef.repo}`,

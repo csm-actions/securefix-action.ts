@@ -25,6 +25,17 @@ Deno.test("parseWorkflowRef", async (t) => {
       },
     );
   });
+  await t.step(".yml and @ in the ref", () => {
+    assertEquals(
+      parseWorkflowRef("foo/server/.github/workflows/securefix.yml@feat@1"),
+      {
+        owner: "foo",
+        repo: "server",
+        workflow: "securefix.yml",
+        ref: "feat@1",
+      },
+    );
+  });
   await t.step("invalid", () => {
     for (
       const s of [
@@ -34,6 +45,10 @@ Deno.test("parseWorkflowRef", async (t) => {
         "foo/server/securefix.yaml@main",
         "foo/server/.github/workflows/@main",
         "foo/server/.github/workflows/dir/securefix.yaml@main",
+        "foo/server/.github/workflows/securefix@main",
+        "foo/server/.github/workflows/securefix.json@main",
+        "foo/server/.github/workflows/securefix.yaml@main branch",
+        "foo/server/.github/workflows/securefix.yaml@0123456789abcdef0123456789abcdef01234567",
       ]
     ) {
       assertThrows(() => parseWorkflowRef(s), Error, undefined, s);
@@ -78,6 +93,16 @@ Deno.test("resolveServer", async (t) => {
       repo: "server",
       workflowRef,
     });
+  });
+  await t.step("both match case-insensitively", () => {
+    assertEquals(
+      resolveServer(
+        "My-Org",
+        "Server",
+        "my-org/server/.github/workflows/securefix.yaml@main",
+      ).repo,
+      "server",
+    );
   });
   await t.step("repository mismatch", () => {
     assertThrows(() => resolveServer("foo", "other", ref));
