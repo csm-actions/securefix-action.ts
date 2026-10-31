@@ -10,7 +10,8 @@
       "LICENSE",
       "README.md",
       "client.ts",
-      "list_fixed_files.ts"
+      "list_fixed_files.ts",
+      "server_workflow.ts"
     ]
   },
   "imports": {
