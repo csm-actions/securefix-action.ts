@@ -3,7 +3,7 @@
   "tasks": {
     "test": "deno test --allow-env --allow-read --allow-write --allow-run=git"
   },
-  "version": "0.2.1",
+  "version": "0.2.2",
   "exports": "./client.ts",
   "publish": {
     "include": [
