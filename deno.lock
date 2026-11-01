@@ -2,7 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@csm-actions/dispatch@0.1": "0.1.0",
-    "jsr:@csm-actions/label@0.1": "0.1.0",
+    "jsr:@csm-actions/label@~0.1.1": "0.1.1",
     "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@suzuki-shunsuke/github-app-token@0.2": "0.2.1",
@@ -22,8 +22,8 @@
         "npm:@actions/github"
       ]
     },
-    "@csm-actions/label@0.1.0": {
-      "integrity": "fb43e9a90c37bd0de435f0f008b1c1c10fccf7eff78919bef16894bfc503fece",
+    "@csm-actions/label@0.1.1": {
+      "integrity": "96e8adf2ffd929bc179d2fa44f6ce8762bc0073575a15dc89d61acd570f52999",
       "dependencies": [
         "jsr:@suzuki-shunsuke/github-app-token@0.2",
         "npm:@actions/core",
@@ -1688,7 +1688,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@csm-actions/dispatch@0.1",
-      "jsr:@csm-actions/label@0.1",
+      "jsr:@csm-actions/label@~0.1.1",
       "jsr:@std/assert@^1.0.19",
       "jsr:@suzuki-shunsuke/github-app-token@~0.2.1",
       "npm:@actions/artifact@^6.2.1",
