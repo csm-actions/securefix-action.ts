@@ -50,10 +50,35 @@ Deno.test("resolveServer", async (t) => {
     );
   });
   await t.step("repository mismatch", () => {
-    assertThrows(() => resolveServer("foo", "other", ref));
+    assertThrows(
+      () => resolveServer("foo", "other", ref),
+      Error,
+      "serverRepository and serverWorkflowRef must point to the same repository",
+    );
   });
   await t.step("owner mismatch", () => {
-    assertThrows(() => resolveServer("bar", "server", ref));
+    assertThrows(
+      () => resolveServer("bar", "server", ref),
+      Error,
+      "serverRepository and serverWorkflowRef must point to the same repository",
+    );
+  });
+  await t.step("invalid workflow ref", () => {
+    for (
+      const s of [
+        "foo/server",
+        "foo/server/securefix.yaml@main",
+        "foo/server/.github/workflows/securefix.yaml",
+        "foo/server/.github/workflows/securefix.yaml@0123456789abcdef0123456789abcdef01234567",
+      ]
+    ) {
+      assertThrows(
+        () => resolveServer("foo", undefined, s),
+        Error,
+        "serverWorkflowRef is invalid",
+        s,
+      );
+    }
   });
   await t.step("neither", () => {
     assertThrows(() => resolveServer("foo", undefined, undefined));

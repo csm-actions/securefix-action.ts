@@ -35,9 +35,29 @@ export const resolveServer = (
     }
     return { owner: clientOwner, repo: serverRepository };
   }
-  const workflowRef = parseWorkflowRef(serverWorkflowRef);
+  // Add the input names to the errors of the library, which doesn't know them.
+  let workflowRef: WorkflowRef;
+  try {
+    workflowRef = parseWorkflowRef(serverWorkflowRef);
+  } catch (error) {
+    throw new Error(`serverWorkflowRef is invalid: ${message(error)}`, {
+      cause: error,
+    });
+  }
   if (serverRepository) {
-    validateRepository(workflowRef, clientOwner, serverRepository);
+    try {
+      validateRepository(workflowRef, clientOwner, serverRepository);
+    } catch (error) {
+      throw new Error(
+        `serverRepository and serverWorkflowRef must point to the same repository: ${
+          message(error)
+        }`,
+        { cause: error },
+      );
+    }
   }
   return { owner: workflowRef.owner, repo: workflowRef.repo, workflowRef };
 };
+
+const message = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
