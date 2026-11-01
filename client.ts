@@ -10,7 +10,7 @@ import * as label from "@csm-actions/label";
 import { listFixedFiles } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
 
-export type WorkflowRun = dispatch.WorkflowRun;
+export type { WorkflowRun } from "@csm-actions/dispatch";
 
 export type PullRequest = {
   title: string;
@@ -36,7 +36,9 @@ export type Inputs = {
    * An Octokit client authenticated as a GitHub App.
    *
    * It's used to create an installation access token for the server
-   * repository, which is revoked once the label is created.
+   * repository, which is revoked once the request is sent.
+   * The token needs the `actions:write` permission with serverWorkflowRef
+   * (workflow_dispatch), or the `issues:write` permission without it (label).
    * Build it with @octokit/auth-app, passing either a private key or a
    * createJwt callback when the key is stored in a KMS or a HSM.
    */
@@ -79,7 +81,7 @@ export type Result = {
    * The server workflow run, which is set only when serverWorkflowRef is set
    * and GitHub returns the run details.
    */
-  serverWorkflowRun?: WorkflowRun;
+  serverWorkflowRun?: dispatch.WorkflowRun;
   changedFiles: string[];
   changedFilesFromRootDir: string[];
 };
@@ -183,7 +185,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   );
   fs.rmSync(txtPath);
   fs.rmSync(jsonPath);
-  let serverWorkflowRun: WorkflowRun | undefined;
+  let serverWorkflowRun: dispatch.WorkflowRun | undefined;
   if (server.workflowRef) {
     serverWorkflowRun = await dispatch.dispatch({
       appOctokit: inputs.appOctokit,

@@ -22,6 +22,21 @@ Deno.test("resolveServer", async (t) => {
       workflowRef,
     });
   });
+  await t.step("full ref, .yml, and @ in the ref", () => {
+    assertEquals(
+      resolveServer(
+        "foo",
+        undefined,
+        "foo/server/.github/workflows/securefix.yml@refs/heads/feat@1",
+      ).workflowRef,
+      {
+        owner: "foo",
+        repo: "server",
+        workflow: "securefix.yml",
+        ref: "refs/heads/feat@1",
+      },
+    );
+  });
   await t.step("another owner", () => {
     assertEquals(
       resolveServer(
