@@ -77,16 +77,12 @@ export type Inputs = {
 
 export type Result = {
   /**
-   * The name of the artifact. It's generated even if no artifact is uploaded,
-   * so check uploaded before using it.
-   */
-  artifactName: string;
-  /**
-   * Whether the artifact is uploaded, i.e. there are changes.
-   * It's true even if only submodules are updated, in which case changedFiles
+   * The name of the uploaded artifact.
+   * It's empty if no artifact is uploaded, i.e. there are no changes.
+   * It's set even if only submodules are updated, in which case changedFiles
    * is empty.
    */
-  uploaded: boolean;
+  artifactName: string;
   /**
    * The server workflow run, which is set only when serverWorkflowRef is set
    * and GitHub returns the run details.
@@ -132,8 +128,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   if (allFixedFiles.size === 0) {
     core.notice("No changes");
     return {
-      artifactName,
-      uploaded: false,
+      artifactName: "",
       changedFiles: [],
       changedFilesFromRootDir: [],
     };
@@ -166,8 +161,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   if (fixedFilesFromRootDir.size === 0 && submodules.length === 0) {
     core.notice("No changes");
     return {
-      artifactName,
-      uploaded: false,
+      artifactName: "",
       changedFiles: [],
       changedFilesFromRootDir: [],
     };
@@ -227,7 +221,6 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   core.info(fixedFiles.join("\n"));
   return {
     artifactName,
-    uploaded: true,
     serverWorkflowRun,
     changedFiles: fixedFiles || [],
     changedFilesFromRootDir: [...fixedFilesFromRootDir],
