@@ -4,17 +4,13 @@ import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 import * as github from "@actions/github";
 import { DefaultArtifactClient } from "@actions/artifact";
-import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
-import { newName } from "@csm-actions/label";
+import type * as githubAppToken from "@suzuki-shunsuke/github-app-token";
+import * as dispatch from "@csm-actions/dispatch";
+import * as label from "@csm-actions/label";
 import { listFixedFiles } from "./list_fixed_files.ts";
-import {
-  parseWorkflowRun,
-  resolveServer,
-  type WorkflowRef,
-  type WorkflowRun,
-} from "./server_workflow.ts";
+import { resolveServer } from "./server_workflow.ts";
 
-export type { WorkflowRun };
+export type { WorkflowRun } from "@csm-actions/dispatch";
 
 export type PullRequest = {
   title: string;
@@ -40,7 +36,9 @@ export type Inputs = {
    * An Octokit client authenticated as a GitHub App.
    *
    * It's used to create an installation access token for the server
-   * repository, which is revoked once the label is created.
+   * repository, which is revoked once the request is sent.
+   * The token needs the `actions:write` permission with serverWorkflowRef
+   * (workflow_dispatch), or the `issues:write` permission without it (label).
    * Build it with @octokit/auth-app, passing either a private key or a
    * createJwt callback when the key is stored in a KMS or a HSM.
    */
@@ -83,7 +81,7 @@ export type Result = {
    * The server workflow run, which is set only when serverWorkflowRef is set
    * and GitHub returns the run details.
    */
-  serverWorkflowRun?: WorkflowRun;
+  serverWorkflowRun?: dispatch.WorkflowRun;
   changedFiles: string[];
   changedFilesFromRootDir: string[];
 };
@@ -100,7 +98,7 @@ const validateAutomergeMethod = (method: string): AutomergeMethod => {
 };
 
 const generateArtifactName = (): string => {
-  return newName("securefix-");
+  return label.newName("securefix-");
 };
 
 export const request = async (inputs: Inputs): Promise<Result> => {
@@ -187,26 +185,27 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   );
   fs.rmSync(txtPath);
   fs.rmSync(jsonPath);
-  let serverWorkflowRun: WorkflowRun | undefined;
+  let serverWorkflowRun: dispatch.WorkflowRun | undefined;
   if (server.workflowRef) {
-    serverWorkflowRun = await dispatchWorkflow(
-      inputs.appOctokit,
-      server.workflowRef,
-      {
+    serverWorkflowRun = await dispatch.dispatch({
+      appOctokit: inputs.appOctokit,
+      workflowRef: server.workflowRef,
+      inputs: {
         client_repository_owner: github.context.repo.owner,
         client_repository_name: github.context.repo.repo,
         client_workflow_run_id: `${github.context.runId}`,
         artifact_name: artifactName,
       },
-    );
+    });
   } else {
-    await createLabel(
-      inputs.appOctokit,
-      server.owner,
-      server.repo,
-      artifactName,
-      `${github.context.repo.owner}/${github.context.repo.repo}/${github.context.runId}`,
-    );
+    await label.create({
+      appOctokit: inputs.appOctokit,
+      owner: server.owner,
+      repo: server.repo,
+      name: artifactName,
+      description:
+        `${github.context.repo.owner}/${github.context.repo.repo}/${github.context.runId}`,
+    });
   }
   if (inputs.failIfChanges || (!inputs.repo && !inputs.branch)) {
     core.setFailed("Changes detected. A commit will be pushed");
@@ -220,102 +219,6 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     changedFiles: fixedFiles || [],
     changedFilesFromRootDir: [...fixedFilesFromRootDir],
   };
-};
-
-/**
- * Creates an installation access token for the server repository, passes it
- * to fn, and revokes it afterwards.
- */
-const withServerToken = async <T>(
-  appOctokit: githubAppToken.Client,
-  owner: string,
-  repo: string,
-  permissions: githubAppToken.Permissions,
-  fn: (octokit: ReturnType<typeof github.getOctokit>) => Promise<T>,
-): Promise<T> => {
-  const token = await githubAppToken.create({
-    octokit: appOctokit,
-    owner: owner,
-    repositories: [repo],
-    permissions: permissions,
-  });
-  // Without this the token would appear in the workflow log.
-  core.setSecret(token.token);
-  try {
-    return await fn(github.getOctokit(token.token));
-  } finally {
-    // The request is sent, so the token has done its job either way.
-    if (githubAppToken.hasExpired(token.expiresAt)) {
-      core.info("GitHub App token has already expired");
-    } else {
-      core.info("Revoking GitHub App token");
-      await githubAppToken.revoke(token.token);
-    }
-  }
-};
-
-const createLabel = async (
-  appOctokit: githubAppToken.Client,
-  owner: string,
-  repo: string,
-  labelName: string,
-  description: string,
-): Promise<void> => {
-  await withServerToken(
-    appOctokit,
-    owner,
-    repo,
-    { issues: "write" },
-    async (octokit) => {
-      await octokit.rest.issues.createLabel({
-        owner: owner,
-        repo: repo,
-        name: labelName,
-        description: description,
-      });
-    },
-  );
-};
-
-/**
- * Runs the server workflow by a workflow_dispatch event.
- *
- * It returns the server workflow run if GitHub returns the run details,
- * otherwise undefined.
- */
-const dispatchWorkflow = async (
-  appOctokit: githubAppToken.Client,
-  workflowRef: WorkflowRef,
-  workflowInputs: Record<string, string>,
-): Promise<WorkflowRun | undefined> => {
-  core.info(
-    `running the server workflow: ${
-      JSON.stringify({ ...workflowRef, inputs: workflowInputs })
-    }`,
-  );
-  return await withServerToken(
-    appOctokit,
-    workflowRef.owner,
-    workflowRef.repo,
-    { actions: "write" },
-    async (octokit) => {
-      const res = await octokit.rest.actions.createWorkflowDispatch({
-        owner: workflowRef.owner,
-        repo: workflowRef.repo,
-        workflow_id: workflowRef.workflow,
-        ref: workflowRef.ref,
-        inputs: workflowInputs,
-        return_run_details: true,
-      });
-      // The endpoint types of @actions/github don't know the response with
-      // the run details, so the body is read defensively.
-      const run = parseWorkflowRun(res.data);
-      if (run) {
-        core.notice(`The server workflow run: ${run.url}`);
-      }
-      return run;
-    },
-  );
 };
 
 const validatePR = (pr: PullRequest) => {

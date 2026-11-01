@@ -19,7 +19,8 @@
     "@actions/core": "npm:@actions/core@^3.0.1",
     "@actions/exec": "npm:@actions/exec@^3.0.0",
     "@actions/github": "npm:@actions/github@^9.1.1",
-    "@csm-actions/label": "jsr:@csm-actions/label@^0.1.0",
+    "@csm-actions/dispatch": "jsr:@csm-actions/dispatch@^0.1.1",
+    "@csm-actions/label": "jsr:@csm-actions/label@^0.1.1",
     "@suzuki-shunsuke/github-app-token": "jsr:@suzuki-shunsuke/github-app-token@^0.2.1",
     "@std/assert": "jsr:@std/assert@^1.0.19"
   }
