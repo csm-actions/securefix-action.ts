@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 import * as github from "@actions/github";
 import { DefaultArtifactClient } from "@actions/artifact";
-import * as githubAppToken from "@suzuki-shunsuke/github-app-token";
+import type * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
 import { listFixedFiles } from "./list_fixed_files.ts";
