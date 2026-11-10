@@ -9,7 +9,7 @@ import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
 import { listFixedFiles } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
-import { readSymlink, type Symlink } from "./symlink.ts";
+import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
 
@@ -141,12 +141,18 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // See readSymlink for details.
   const symlinks: Symlink[] = [];
   const fixedFilesFromRootDir = new Set<string>();
+  // Files under a symlinked directory are deleted from Git's point of view.
+  // They are listed in _files.txt but not uploaded, so the server deletes them.
+  const filesUnderSymlink = new Set<string>();
+  const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
   for (const file of allFixedFiles) {
-    const fullPath = path.join(
-      inputs.workspace,
-      inputs.rootDir ?? "",
-      file,
-    );
+    const fullPath = path.join(baseDir, file);
+    if (isUnderSymlink(baseDir, file)) {
+      core.info(`Detected a file under a symlink, which is deleted: ${file}`);
+      fixedFilesFromRootDir.add(file);
+      filesUnderSymlink.add(file);
+      continue;
+    }
     const target = readSymlink(fullPath);
     if (target !== undefined) {
       core.info(`Detected symlink: ${file} -> ${target}`);
@@ -186,14 +192,12 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   createMetadataFile(inputs, submodules, symlinks, jsonPath);
   fs.writeFileSync(txtPath, [...fixedFilesFromRootDir].join("\n") + "\n");
 
-  const fixedFiles = [...fixedFilesFromRootDir].map((file) =>
-    path.join(inputs.rootDir ?? "", file)
-  );
-
   // Exclude deleted files from upload (they are still listed in _files.txt)
-  const uploadFiles = fixedFiles.filter((file) =>
-    fs.existsSync(path.join(inputs.workspace, file))
-  );
+  const uploadFiles = [...fixedFilesFromRootDir]
+    .filter((file) =>
+      !filesUnderSymlink.has(file) && fs.existsSync(path.join(baseDir, file))
+    )
+    .map((file) => path.join(inputs.rootDir ?? "", file));
 
   // upload artifact
   const artifact = new DefaultArtifactClient();

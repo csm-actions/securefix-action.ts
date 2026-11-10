@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 export type Symlink = {
   /** The path of the symlink relative to rootDir */
@@ -17,6 +18,38 @@ export type Symlink = {
  *
  * lstat is used so that dangling symlinks aren't mistaken for deleted files.
  */
+/**
+ * Returns true if a parent directory of the file is a symlink.
+ *
+ * file is a relative path from baseDir, and baseDir itself isn't checked.
+ *
+ * Git doesn't follow symlinks, so when a directory is replaced with a symlink,
+ * files in the directory are deleted from Git's point of view.
+ * But fs.existsSync and fs.lstatSync follow the symlink, so they can find
+ * files in the link target, which mustn't be committed under the symlink.
+ */
+export const isUnderSymlink = (baseDir: string, file: string): boolean => {
+  const elems = file.split("/");
+  let p = baseDir;
+  for (const elem of elems.slice(0, -1)) {
+    p = path.join(p, elem);
+    let stats: fs.Stats;
+    try {
+      stats = fs.lstatSync(p);
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        return false;
+      }
+      throw error;
+    }
+    if (stats.isSymbolicLink()) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export const readSymlink = (filePath: string): string | undefined => {
   let stats: fs.Stats;
   try {
