@@ -9,16 +9,6 @@ export type Symlink = {
 };
 
 /**
- * Returns the link target if the file is a symlink, otherwise undefined.
- *
- * Symlinks can't be sent as files, because @actions/artifact dereferences
- * them on upload and unzip-stream writes every entry as a regular file on
- * download. So the link target is sent in the metadata file instead, and
- * the server commits it as a tree entry with mode 120000.
- *
- * lstat is used so that dangling symlinks aren't mistaken for deleted files.
- */
-/**
  * Returns true if a parent directory of the file is a symlink.
  *
  * file is a relative path from baseDir, and baseDir itself isn't checked.
@@ -50,12 +40,24 @@ export const isUnderSymlink = (baseDir: string, file: string): boolean => {
   return false;
 };
 
+/**
+ * Returns the link target if the file is a symlink, otherwise undefined.
+ *
+ * Symlinks can't be sent as files, because @actions/artifact dereferences
+ * them on upload and unzip-stream writes every entry as a regular file on
+ * download. So the link target is sent in the metadata file instead, and
+ * the server commits it as a tree entry with mode 120000.
+ *
+ * lstat is used so that dangling symlinks aren't mistaken for deleted files.
+ */
 export const readSymlink = (filePath: string): string | undefined => {
   let stats: fs.Stats;
   try {
     stats = fs.lstatSync(filePath);
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    // ENOTDIR: a parent directory was replaced with a regular file
+    if (code === "ENOENT" || code === "ENOTDIR") {
       return undefined;
     }
     throw error;

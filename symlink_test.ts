@@ -44,6 +44,13 @@ Deno.test("readSymlink: deleted file", () => {
   assertEquals(readSymlink(path.join(dir, "not-found.txt")), undefined);
 });
 
+Deno.test("readSymlink: a parent directory was replaced with a regular file", () => {
+  const dir = tmpDir();
+  fs.writeFileSync(path.join(dir, "a"), "");
+  assertEquals(readSymlink(path.join(dir, "a", "b.txt")), undefined);
+  assertEquals(readSymlink(path.join(dir, "a", "b", "c.txt")), undefined);
+});
+
 Deno.test("isUnderSymlink: file in a symlinked directory", () => {
   const dir = tmpDir();
   fs.mkdirSync(path.join(dir, "other"));

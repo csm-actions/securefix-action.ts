@@ -204,7 +204,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   await artifact.uploadArtifact(
     artifactName,
     uploadFiles.concat(jsonPath, txtPath),
-    path.join(inputs.workspace, inputs.rootDir ?? ""),
+    baseDir,
   );
   fs.rmSync(txtPath);
   fs.rmSync(jsonPath);
