@@ -143,14 +143,15 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const fixedFilesFromRootDir = new Set<string>();
   // Files under a symlinked directory are deleted from Git's point of view.
   // They are listed in _files.txt but not uploaded, so the server deletes them.
-  const filesUnderSymlink = new Set<string>();
+  // They are kept apart from fixedFilesFromRootDir, because fs.existsSync
+  // follows the symlink and could find files in the link target.
+  const filesUnderSymlink: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
   for (const file of allFixedFiles) {
     const fullPath = path.join(baseDir, file);
     if (isUnderSymlink(baseDir, file)) {
       core.info(`Detected a file under a symlink, which is deleted: ${file}`);
-      fixedFilesFromRootDir.add(file);
-      filesUnderSymlink.add(file);
+      filesUnderSymlink.push(file);
       continue;
     }
     const target = readSymlink(fullPath);
@@ -175,8 +176,8 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   }
 
   if (
-    fixedFilesFromRootDir.size === 0 && submodules.length === 0 &&
-    symlinks.length === 0
+    fixedFilesFromRootDir.size === 0 && filesUnderSymlink.length === 0 &&
+    submodules.length === 0 && symlinks.length === 0
   ) {
     core.notice("No changes");
     return {
@@ -190,13 +191,14 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
   createMetadataFile(inputs, submodules, symlinks, jsonPath);
-  fs.writeFileSync(txtPath, [...fixedFilesFromRootDir].join("\n") + "\n");
+  fs.writeFileSync(
+    txtPath,
+    [...fixedFilesFromRootDir, ...filesUnderSymlink].join("\n") + "\n",
+  );
 
   // Exclude deleted files from upload (they are still listed in _files.txt)
   const uploadFiles = [...fixedFilesFromRootDir]
-    .filter((file) =>
-      !filesUnderSymlink.has(file) && fs.existsSync(path.join(baseDir, file))
-    )
+    .filter((file) => fs.existsSync(path.join(baseDir, file)))
     .map((file) => path.join(inputs.rootDir ?? "", file));
 
   // upload artifact
@@ -237,6 +239,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   }
   const changedFilesFromRootDir = [
     ...fixedFilesFromRootDir,
+    ...filesUnderSymlink,
     ...symlinks.map((symlink) => symlink.path),
   ];
   const changedFiles = changedFilesFromRootDir.map((file) =>
