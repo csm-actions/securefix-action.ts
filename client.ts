@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as core from "@actions/core";
-import * as exec from "@actions/exec";
 import * as github from "@actions/github";
 import { DefaultArtifactClient } from "@actions/artifact";
 import type * as githubAppToken from "@suzuki-shunsuke/github-app-token";
@@ -9,6 +8,7 @@ import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
 import { listFixedFiles } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
+import { getSubmoduleSHA } from "./submodule.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
 
@@ -144,14 +144,16 @@ export const request = async (inputs: Inputs): Promise<Result> => {
       file,
     );
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
-      const result = await exec.getExecOutput(
-        "git",
-        ["-C", fullPath, "rev-parse", "HEAD"],
-      );
-      const sha = result.stdout.trim();
+      const sha = await getSubmoduleSHA(fullPath);
       if (sha) {
         core.info(`Detected submodule: ${file} (${sha})`);
         submodules.push({ path: file, sha });
+      } else {
+        // e.g. a symlink or a file was replaced with a directory.
+        // Files in the directory are listed separately.
+        core.warning(
+          `${file} is a directory but not a submodule, so it's ignored`,
+        );
       }
     } else {
       fixedFilesFromRootDir.add(file);
