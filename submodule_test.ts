@@ -142,6 +142,15 @@ Deno.test(
 );
 
 Deno.test(
+  "getSubmoduleSHA: git directory",
+  withTmpDir(async (dir) => {
+    initRepo(dir, "parent\n");
+    assertEquals(await getSubmoduleSHA(path.join(dir, ".git")), "");
+    assertEquals(await getSubmoduleSHA(path.join(dir, ".git", "refs")), "");
+  }),
+);
+
+Deno.test(
   "getSubmoduleSHA: GIT_DIR is ignored",
   withTmpDir(async (dir) => {
     initRepo(dir, "parent\n");

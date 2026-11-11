@@ -2,8 +2,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { assertEquals } from "@std/assert";
-import { listFixedFiles } from "./list_fixed_files.ts";
+import { assertEquals, assertThrows } from "@std/assert";
+import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
 
 // Ignore the user's and the system's git config,
 // e.g. core.quotePath=false would hide the quoting issue.
@@ -110,3 +110,19 @@ Deno.test("paths are relative to rootDir", async () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+Deno.test("normalizeFixedFile: trailing slashes are removed", () => {
+  assertEquals(normalizeFixedFile("a.txt"), "a.txt");
+  assertEquals(normalizeFixedFile("sub/"), "sub");
+  assertEquals(normalizeFixedFile("a/b//"), "a/b");
+});
+
+for (const file of ["", ".", "./", "a/..", "a/../"]) {
+  Deno.test(`normalizeFixedFile: root directory ${JSON.stringify(file)} throws`, () => {
+    assertThrows(
+      () => normalizeFixedFile(file),
+      Error,
+      "a fixed file must not be the root directory",
+    );
+  });
+}
