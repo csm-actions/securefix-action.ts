@@ -9,6 +9,7 @@ import * as label from "@csm-actions/label";
 import { listFixedFiles } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
 import { getSubmoduleSHA } from "./submodule.ts";
+import { isTracked } from "./git_index.ts";
 import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
@@ -146,6 +147,11 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // They are kept apart from fixedFilesFromRootDir, because fs.existsSync
   // follows the symlink and could find files in the link target.
   const filesUnderSymlink: string[] = [];
+  // Paths of files, symlinks, or submodules replaced with directories.
+  // They are sent in the metadata file and deleted explicitly by the server,
+  // because the Create a tree API can't add files under them otherwise, and
+  // the server can't tell they are deleted as they exist as directories.
+  const deletedFiles: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
   for (const file of allFixedFiles) {
     const fullPath = path.join(baseDir, file);
@@ -163,14 +169,21 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
       const sha = await getSubmoduleSHA(fullPath);
       if (!sha) {
-        // Git lists a regular directory only when a symlink or a file is
-        // replaced with it. The commit fails because the old entry isn't
-        // deleted, so fail here with a clear message.
-        throw new Error(
-          `${file} is a directory but not a submodule. ` +
-            "Replacing a file or a symlink with a directory isn't supported. " +
-            "If you specify files, specify files in the directory instead of the directory",
+        // Git lists a regular directory only when a file, a symlink, or a
+        // submodule is replaced with it. Files in the directory are listed
+        // separately.
+        const dirPath = file.replace(/\/+$/, "");
+        if (!(await isTracked(baseDir, dirPath))) {
+          throw new Error(
+            `${file} is a directory but not a submodule. ` +
+              "If you specify files, specify files in the directory instead of the directory",
+          );
+        }
+        core.info(
+          `Detected a directory which replaced a tracked path, which is deleted: ${dirPath}`,
         );
+        deletedFiles.push(dirPath);
+        continue;
       }
       // git ls-files lists an untracked nested repository with a trailing slash
       const submodulePath = file.replace(/\/+$/, "");
@@ -183,7 +196,8 @@ export const request = async (inputs: Inputs): Promise<Result> => {
 
   if (
     fixedFilesFromRootDir.size === 0 && filesUnderSymlink.length === 0 &&
-    submodules.length === 0 && symlinks.length === 0
+    deletedFiles.length === 0 && submodules.length === 0 &&
+    symlinks.length === 0
   ) {
     core.notice("No changes");
     return {
@@ -196,7 +210,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const txtPath = path.join(inputs.rootDir ?? "", `${artifactName}_files.txt`);
   const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
-  createMetadataFile(inputs, submodules, symlinks, jsonPath);
+  createMetadataFile(inputs, submodules, symlinks, deletedFiles, jsonPath);
   fs.writeFileSync(
     txtPath,
     [...fixedFilesFromRootDir, ...filesUnderSymlink].join("\n") + "\n",
@@ -246,6 +260,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const changedFilesFromRootDir = [
     ...fixedFilesFromRootDir,
     ...filesUnderSymlink,
+    ...deletedFiles,
     ...symlinks.map((symlink) => symlink.path),
   ];
   const changedFiles = changedFilesFromRootDir.map((file) =>
@@ -288,6 +303,7 @@ const createMetadataFile = (
   inputs: Inputs,
   submodules: Array<{ path: string; sha: string }>,
   symlinks: Symlink[],
+  deletedFiles: string[],
   filePath: string,
 ) => {
   const value = {
@@ -301,6 +317,7 @@ const createMetadataFile = (
       custom: inputs.custom,
       submodules: submodules.length > 0 ? submodules : undefined,
       symlinks: symlinks.length > 0 ? symlinks : undefined,
+      deleted_files: deletedFiles.length > 0 ? deletedFiles : undefined,
     },
   };
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
