@@ -9,6 +9,7 @@ import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
 import { listFixedFiles } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
+import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
 
@@ -136,13 +137,29 @@ export const request = async (inputs: Inputs): Promise<Result> => {
 
   // Separate submodule paths from regular files
   const submodules: Array<{ path: string; sha: string }> = [];
+  // Symlinks are sent in the metadata file, not as files.
+  // See readSymlink for details.
+  const symlinks: Symlink[] = [];
   const fixedFilesFromRootDir = new Set<string>();
+  // Files under a symlinked directory are deleted from Git's point of view.
+  // They are listed in _files.txt but not uploaded, so the server deletes them.
+  // They are kept apart from fixedFilesFromRootDir, because fs.existsSync
+  // follows the symlink and could find files in the link target.
+  const filesUnderSymlink: string[] = [];
+  const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
   for (const file of allFixedFiles) {
-    const fullPath = path.join(
-      inputs.workspace,
-      inputs.rootDir ?? "",
-      file,
-    );
+    const fullPath = path.join(baseDir, file);
+    if (isUnderSymlink(baseDir, file)) {
+      core.info(`Detected a file under a symlink, which is deleted: ${file}`);
+      filesUnderSymlink.push(file);
+      continue;
+    }
+    const target = readSymlink(fullPath);
+    if (target !== undefined) {
+      core.info(`Detected symlink: ${file} -> ${target}`);
+      symlinks.push({ path: file, target });
+      continue;
+    }
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
       const result = await exec.getExecOutput(
         "git",
@@ -158,7 +175,10 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     }
   }
 
-  if (fixedFilesFromRootDir.size === 0 && submodules.length === 0) {
+  if (
+    fixedFilesFromRootDir.size === 0 && filesUnderSymlink.length === 0 &&
+    submodules.length === 0 && symlinks.length === 0
+  ) {
     core.notice("No changes");
     return {
       artifactName: "",
@@ -170,24 +190,23 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const txtPath = path.join(inputs.rootDir ?? "", `${artifactName}_files.txt`);
   const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
-  createMetadataFile(inputs, submodules, jsonPath);
-  fs.writeFileSync(txtPath, [...fixedFilesFromRootDir].join("\n") + "\n");
-
-  const fixedFiles = [...fixedFilesFromRootDir].map((file) =>
-    path.join(inputs.rootDir ?? "", file)
+  createMetadataFile(inputs, submodules, symlinks, jsonPath);
+  fs.writeFileSync(
+    txtPath,
+    [...fixedFilesFromRootDir, ...filesUnderSymlink].join("\n") + "\n",
   );
 
   // Exclude deleted files from upload (they are still listed in _files.txt)
-  const uploadFiles = fixedFiles.filter((file) =>
-    fs.existsSync(path.join(inputs.workspace, file))
-  );
+  const uploadFiles = [...fixedFilesFromRootDir]
+    .filter((file) => fs.existsSync(path.join(baseDir, file)))
+    .map((file) => path.join(inputs.rootDir ?? "", file));
 
   // upload artifact
   const artifact = new DefaultArtifactClient();
   await artifact.uploadArtifact(
     artifactName,
     uploadFiles.concat(jsonPath, txtPath),
-    path.join(inputs.workspace, inputs.rootDir ?? ""),
+    baseDir,
   );
   fs.rmSync(txtPath);
   fs.rmSync(jsonPath);
@@ -218,12 +237,20 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   } else {
     core.notice("Changes detected. A commit will be pushed");
   }
-  core.info(fixedFiles.join("\n"));
+  const changedFilesFromRootDir = [
+    ...fixedFilesFromRootDir,
+    ...filesUnderSymlink,
+    ...symlinks.map((symlink) => symlink.path),
+  ];
+  const changedFiles = changedFilesFromRootDir.map((file) =>
+    path.join(inputs.rootDir ?? "", file)
+  );
+  core.info(changedFiles.join("\n"));
   return {
     artifactName,
     serverWorkflowRun,
-    changedFiles: fixedFiles || [],
-    changedFilesFromRootDir: [...fixedFilesFromRootDir],
+    changedFiles,
+    changedFilesFromRootDir,
   };
 };
 
@@ -254,6 +281,7 @@ const validatePR = (pr: PullRequest) => {
 const createMetadataFile = (
   inputs: Inputs,
   submodules: Array<{ path: string; sha: string }>,
+  symlinks: Symlink[],
   filePath: string,
 ) => {
   const value = {
@@ -266,6 +294,7 @@ const createMetadataFile = (
       pull_request: inputs.pr,
       custom: inputs.custom,
       submodules: submodules.length > 0 ? submodules : undefined,
+      symlinks: symlinks.length > 0 ? symlinks : undefined,
     },
   };
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");

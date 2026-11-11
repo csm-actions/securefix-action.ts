@@ -11,7 +11,8 @@
       "README.md",
       "client.ts",
       "list_fixed_files.ts",
-      "server_workflow.ts"
+      "server_workflow.ts",
+      "symlink.ts"
     ]
   },
   "imports": {
