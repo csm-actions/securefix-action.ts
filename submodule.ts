@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import * as exec from "@actions/exec";
 
 /**
@@ -9,26 +8,20 @@ import * as exec from "@actions/exec";
  * `git -C <dir> rev-parse HEAD` alone can't tell them apart, because in a
  * regular directory it returns HEAD of the enclosing repository, which would
  * be committed as a bogus submodule.
+ * `--show-prefix` outputs the path of dir from the top level directory,
+ * which is empty only if dir is the top level directory.
+ *
+ * It throws an error if git fails, e.g. HEAD doesn't exist or the directory
+ * is owned by another user (safe.directory).
  */
 export const getSubmoduleSHA = async (dir: string): Promise<string> => {
-  const toplevel = await exec.getExecOutput(
+  const result = await exec.getExecOutput(
     "git",
-    ["-C", dir, "rev-parse", "--show-toplevel"],
-    { ignoreReturnCode: true, silent: true },
+    ["-C", dir, "rev-parse", "--show-prefix", "HEAD"],
   );
-  if (toplevel.exitCode !== 0) {
+  const [prefix, sha] = result.stdout.split("\n");
+  if (prefix !== "") {
     return "";
   }
-  if (fs.realpathSync(toplevel.stdout.trim()) !== fs.realpathSync(dir)) {
-    return "";
-  }
-  const head = await exec.getExecOutput(
-    "git",
-    ["-C", dir, "rev-parse", "HEAD"],
-    { ignoreReturnCode: true, silent: true },
-  );
-  if (head.exitCode !== 0) {
-    return "";
-  }
-  return head.stdout.trim();
+  return sha.trim();
 };

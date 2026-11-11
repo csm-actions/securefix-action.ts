@@ -162,16 +162,20 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     }
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
       const sha = await getSubmoduleSHA(fullPath);
-      if (sha) {
-        core.info(`Detected submodule: ${file} (${sha})`);
-        submodules.push({ path: file, sha });
-      } else {
-        // e.g. a symlink or a file was replaced with a directory.
-        // Files in the directory are listed separately.
-        core.warning(
-          `${file} is a directory but not a submodule, so it's ignored`,
+      if (!sha) {
+        // Git lists a regular directory only when a symlink or a file is
+        // replaced with it. The commit fails because the old entry isn't
+        // deleted, so fail here with a clear message.
+        throw new Error(
+          `${file} is a directory but not a submodule. ` +
+            "Replacing a file or a symlink with a directory isn't supported. " +
+            "If you specify files, specify files in the directory instead of the directory",
         );
       }
+      // git ls-files lists an untracked nested repository with a trailing slash
+      const submodulePath = file.replace(/\/+$/, "");
+      core.info(`Detected submodule: ${submodulePath} (${sha})`);
+      submodules.push({ path: submodulePath, sha });
     } else {
       fixedFilesFromRootDir.add(file);
     }

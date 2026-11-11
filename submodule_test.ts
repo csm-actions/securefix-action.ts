@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { assertEquals, assertMatch } from "@std/assert";
+import { assertEquals, assertMatch, assertRejects } from "@std/assert";
 import { getSubmoduleSHA } from "./submodule.ts";
 
 // Ignore the user's and the system's git config.
@@ -66,8 +66,51 @@ Deno.test(
 );
 
 Deno.test(
-  "getSubmoduleSHA: directory outside a repository",
+  "getSubmoduleSHA: submodule added by git submodule add",
   withTmpDir(async (dir) => {
-    assertEquals(await getSubmoduleSHA(dir), "");
+    const sha = initRepo(path.join(dir, "upstream"), "upstream\n");
+    initRepo(path.join(dir, "parent"), "parent\n");
+    git(
+      path.join(dir, "parent"),
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      "-q",
+      path.join(dir, "upstream"),
+      "sub",
+    );
+    // .git of a submodule is a file pointing to .git/modules of the parent
+    assertEquals(
+      fs.statSync(path.join(dir, "parent", "sub", ".git")).isFile(),
+      true,
+    );
+    assertEquals(await getSubmoduleSHA(path.join(dir, "parent", "sub")), sha);
+  }),
+);
+
+Deno.test(
+  "getSubmoduleSHA: nested directory in a submodule",
+  withTmpDir(async (dir) => {
+    initRepo(dir, "parent\n");
+    initRepo(path.join(dir, "sub"), "sub\n");
+    fs.mkdirSync(path.join(dir, "sub", "x"));
+    assertEquals(await getSubmoduleSHA(path.join(dir, "sub", "x")), "");
+  }),
+);
+
+Deno.test(
+  "getSubmoduleSHA: git fails if HEAD doesn't exist",
+  withTmpDir(async (dir) => {
+    initRepo(dir, "parent\n");
+    git(path.join(dir), "init", "-q", "unborn");
+    await assertRejects(() => getSubmoduleSHA(path.join(dir, "unborn")));
+  }),
+);
+
+Deno.test(
+  "getSubmoduleSHA: git fails outside a repository",
+  withTmpDir(async (dir) => {
+    await assertRejects(() => getSubmoduleSHA(dir));
   }),
 );
