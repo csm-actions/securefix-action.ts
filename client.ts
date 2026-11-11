@@ -1,14 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as core from "@actions/core";
-import * as exec from "@actions/exec";
 import * as github from "@actions/github";
 import { DefaultArtifactClient } from "@actions/artifact";
 import type * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
-import { listFixedFiles } from "./list_fixed_files.ts";
+import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
+import { getSubmoduleSHA } from "./submodule.ts";
 import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
@@ -147,7 +147,14 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // follows the symlink and could find files in the link target.
   const filesUnderSymlink: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
-  for (const file of allFixedFiles) {
+  // Different paths can be normalized to the same path, e.g. "sub" and "sub/"
+  const normalizedFiles = new Set<string>();
+  for (const listedFile of allFixedFiles) {
+    const file = normalizeFixedFile(listedFile);
+    if (normalizedFiles.has(file)) {
+      continue;
+    }
+    normalizedFiles.add(file);
     const fullPath = path.join(baseDir, file);
     if (isUnderSymlink(baseDir, file)) {
       core.info(`Detected a file under a symlink, which is deleted: ${file}`);
@@ -161,15 +168,20 @@ export const request = async (inputs: Inputs): Promise<Result> => {
       continue;
     }
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
-      const result = await exec.getExecOutput(
-        "git",
-        ["-C", fullPath, "rev-parse", "HEAD"],
-      );
-      const sha = result.stdout.trim();
-      if (sha) {
-        core.info(`Detected submodule: ${file} (${sha})`);
-        submodules.push({ path: file, sha });
+      const sha = await getSubmoduleSHA(fullPath);
+      if (!sha) {
+        // Git lists a regular directory only when a file, a symlink, or a
+        // submodule is replaced with it. The commit fails because the old
+        // entry isn't deleted, so fail here with a clear message.
+        // A directory can also be specified in files with useGit: false.
+        throw new Error(
+          `${file} is a directory but not a submodule. ` +
+            "Replacing a file, a symlink, or a submodule with a directory isn't supported yet. " +
+            `If ${file} isn't tracked by Git and you specified it in files, specify files in it instead`,
+        );
       }
+      core.info(`Detected submodule: ${file} (${sha})`);
+      submodules.push({ path: file, sha });
     } else {
       fixedFilesFromRootDir.add(file);
     }

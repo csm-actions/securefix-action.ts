@@ -2,8 +2,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { assertEquals } from "@std/assert";
-import { listFixedFiles } from "./list_fixed_files.ts";
+import { assertEquals, assertThrows } from "@std/assert";
+import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
 
 // Ignore the user's and the system's git config,
 // e.g. core.quotePath=false would hide the quoting issue.
@@ -110,3 +110,35 @@ Deno.test("paths are relative to rootDir", async () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+for (
+  const [file, expected] of [
+    ["a.txt", "a.txt"],
+    ["sub/", "sub"],
+    ["a/b//", "a/b"],
+    ["./a.txt", "a.txt"],
+    ["a/./b", "a/b"],
+    ["a//b", "a/b"],
+    ["a/../b/", "b"],
+  ]
+) {
+  Deno.test(`normalizeFixedFile: ${JSON.stringify(file)}`, () => {
+    assertEquals(normalizeFixedFile(file), expected);
+  });
+}
+
+for (const file of ["..", "../a", "a/../../b", "/a", "/"]) {
+  Deno.test(`normalizeFixedFile: outside the root directory ${JSON.stringify(file)} throws`, () => {
+    assertThrows(() => normalizeFixedFile(file), Error);
+  });
+}
+
+for (const file of ["", ".", "./", "a/..", "a/../"]) {
+  Deno.test(`normalizeFixedFile: root directory ${JSON.stringify(file)} throws`, () => {
+    assertThrows(
+      () => normalizeFixedFile(file),
+      Error,
+      "a fixed file must not be the root directory",
+    );
+  });
+}

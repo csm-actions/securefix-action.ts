@@ -12,6 +12,7 @@
       "client.ts",
       "list_fixed_files.ts",
       "server_workflow.ts",
+      "submodule.ts",
       "symlink.ts"
     ]
   },
