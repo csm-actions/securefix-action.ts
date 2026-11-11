@@ -16,6 +16,8 @@ const repositoryEnvNames = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"];
  * be committed as a bogus submodule.
  * `--show-prefix` outputs the path of dir from the top level directory,
  * which is empty only if dir is the top level directory.
+ * It's also empty in a git directory such as .git, so
+ * `--is-inside-work-tree` is checked too.
  *
  * It throws an error if git fails, e.g. HEAD doesn't exist or the directory
  * is owned by another user (safe.directory).
@@ -31,7 +33,14 @@ export const getSubmoduleSHA = async (dir: string): Promise<string> => {
   try {
     const result = await exec.getExecOutput(
       "git",
-      ["-C", dir, "rev-parse", "--show-prefix", "HEAD"],
+      [
+        "-C",
+        dir,
+        "rev-parse",
+        "--is-inside-work-tree",
+        "--show-prefix",
+        "HEAD",
+      ],
       { env },
     );
     stdout = result.stdout;
@@ -41,9 +50,18 @@ export const getSubmoduleSHA = async (dir: string): Promise<string> => {
       { cause: error },
     );
   }
-  const [prefix, sha] = stdout.split("\n");
-  if (prefix !== "") {
+  const [insideWorkTree, prefix, sha] = stdout.split("\n");
+  if (
+    !["true", "false"].includes(insideWorkTree) ||
+    prefix === undefined ||
+    !/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(sha ?? "")
+  ) {
+    throw new Error(
+      `failed to check if a directory ${dir} is a submodule: unexpected output of git rev-parse: ${stdout}`,
+    );
+  }
+  if (insideWorkTree !== "true" || prefix !== "") {
     return "";
   }
-  return sha.trim();
+  return sha;
 };

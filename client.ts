@@ -6,7 +6,7 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import type * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
-import { listFixedFiles } from "./list_fixed_files.ts";
+import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
 import { getSubmoduleSHA } from "./submodule.ts";
 import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
@@ -148,8 +148,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const filesUnderSymlink: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
   for (const listedFile of allFixedFiles) {
-    // git ls-files lists an untracked nested repository with a trailing slash
-    const file = listedFile.replace(/\/+$/, "");
+    const file = normalizeFixedFile(listedFile);
     const fullPath = path.join(baseDir, file);
     if (isUnderSymlink(baseDir, file)) {
       core.info(`Detected a file under a symlink, which is deleted: ${file}`);
