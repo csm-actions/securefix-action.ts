@@ -9,7 +9,11 @@ import * as label from "@csm-actions/label";
 import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
 import { getSubmoduleSHA } from "./submodule.ts";
-import { isTracked } from "./git_index.ts";
+import {
+  findReplacedParents,
+  getIndexModes,
+  gitlinkMode,
+} from "./git_index.ts";
 import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
@@ -90,7 +94,13 @@ export type Result = {
    * and GitHub returns the run details.
    */
   serverWorkflowRun?: dispatch.WorkflowRun;
+  /**
+   * Changed paths from the workspace: changed and deleted files, symlinks,
+   * and paths replaced with directories (which are deleted).
+   * Submodules aren't included. Paths may not exist as regular files.
+   */
   changedFiles: string[];
+  /** The same as changedFiles, but paths are relative to rootDir */
   changedFilesFromRootDir: string[];
 };
 
@@ -151,8 +161,9 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // They are sent in the metadata file and deleted explicitly by the server,
   // because the Create a tree API can't add files under them otherwise, and
   // the server can't tell they are deleted as they exist as directories.
-  const deletedFiles: string[] = [];
+  const deletedFiles = new Set<string>();
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
+  const indexModes = await getIndexModes(baseDir);
   // Different paths can be normalized to the same path, e.g. "sub" and "sub/"
   const normalizedFiles = new Set<string>();
   for (const listedFile of allFixedFiles) {
@@ -176,20 +187,27 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
       const sha = await getSubmoduleSHA(fullPath);
       if (!sha) {
-        // Git lists a regular directory only when a file, a symlink, or a
-        // submodule is replaced with it. Files in the directory are listed
-        // separately.
-        if (!(await isTracked(baseDir, file))) {
+        // Git lists a regular directory only when a file or a symlink is
+        // replaced with it. Files in the directory are listed separately.
+        const mode = indexModes.get(file);
+        if (mode === gitlinkMode) {
+          // It may be an uninitialized submodule, which mustn't be deleted.
+          throw new Error(
+            `${file} is a submodule but it isn't checked out. ` +
+              "Replacing a submodule with a directory isn't supported",
+          );
+        }
+        if (mode === undefined) {
           // e.g. a directory specified in files with useGit: false
           throw new Error(
-            `${file} is a directory but neither a submodule nor a tracked path replaced with a directory. ` +
+            `${file} is a directory but neither a submodule nor a tracked file or symlink replaced with a directory. ` +
               "If you specified it in files, specify files in it instead",
           );
         }
         core.info(
-          `Detected a directory which replaced a tracked path, which is deleted: ${file}`,
+          `Detected a directory which replaced a tracked file or symlink, which is deleted: ${file}`,
         );
-        deletedFiles.push(file);
+        deletedFiles.add(file);
         continue;
       }
       core.info(`Detected submodule: ${file} (${sha})`);
@@ -199,9 +217,33 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     }
   }
 
+  // A tracked file or symlink replaced with a directory must be deleted
+  // explicitly to add paths under it. git lists only the paths under it if
+  // files are specified, e.g. files: f/x where f was a file.
+  for (
+    const parent of findReplacedParents(
+      [
+        ...[...fixedFilesFromRootDir].filter((file) =>
+          fs.existsSync(path.join(baseDir, file))
+        ),
+        ...symlinks.map((symlink) => symlink.path),
+        ...submodules.map((submodule) => submodule.path),
+      ],
+      indexModes,
+    )
+  ) {
+    if (deletedFiles.has(parent)) {
+      continue;
+    }
+    core.info(
+      `Detected a directory which replaced a tracked file or symlink, which is deleted: ${parent}`,
+    );
+    deletedFiles.add(parent);
+  }
+
   if (
     fixedFilesFromRootDir.size === 0 && filesUnderSymlink.length === 0 &&
-    deletedFiles.length === 0 && submodules.length === 0 &&
+    deletedFiles.size === 0 && submodules.length === 0 &&
     symlinks.length === 0
   ) {
     core.notice("No changes");
@@ -215,7 +257,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const txtPath = path.join(inputs.rootDir ?? "", `${artifactName}_files.txt`);
   const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
-  createMetadataFile(inputs, submodules, symlinks, deletedFiles, jsonPath);
+  createMetadataFile(inputs, submodules, symlinks, [...deletedFiles], jsonPath);
   fs.writeFileSync(
     txtPath,
     [...fixedFilesFromRootDir, ...filesUnderSymlink].join("\n") + "\n",
