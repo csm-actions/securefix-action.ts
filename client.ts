@@ -152,7 +152,8 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const filesUnderSymlink: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
   // Directories which aren't submodules. Git lists a regular directory only
-  // when a file or a symlink is replaced with it.
+  // when a file or a symlink is replaced with it, and files in it are listed
+  // separately. With useGit: false, it can be specified in files.
   const listedDirs: string[] = [];
   // Different paths can be normalized to the same path, e.g. "sub" and "sub/"
   const normalizedFiles = new Set<string>();
@@ -177,13 +178,6 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
       const sha = await getSubmoduleSHA(fullPath);
       if (!sha) {
-        if (inputs.useGit === false) {
-          // Files in the directory aren't listed with useGit: false
-          throw new Error(
-            `${file} is a directory but not a submodule. Specify files in it instead`,
-          );
-        }
-        // Files in the directory are listed separately
         core.info(
           `Detected a directory which replaced a file or a symlink: ${file}`,
         );
@@ -200,16 +194,21 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const existingFiles = [...fixedFilesFromRootDir].filter((file) =>
     fs.existsSync(path.join(baseDir, file))
   );
-  // A file or a symlink replaced with a directory.
-  // If paths are added under it, the server deletes it because it's a file or
-  // a symlink in the base tree (commit-ts). Otherwise, it's listed in
-  // _files.txt without being uploaded, so the server deletes it as a deleted
-  // file.
+  // Listed directories without new paths under them. See listDeletedDirs.
   const deletedDirs = listDeletedDirs(listedDirs, [
     ...existingFiles,
     ...symlinks.map((symlink) => symlink.path),
     ...submodules.map((submodule) => submodule.path),
   ]);
+  if (inputs.useGit === false && deletedDirs.length > 0) {
+    // With useGit: false, files in a directory aren't listed, so the
+    // directory would be committed as a deletion without its files.
+    throw new Error(
+      `${
+        deletedDirs.join(", ")
+      } is a directory but not a submodule, and no files in it are specified. Specify files in it instead`,
+    );
+  }
 
   if (
     fixedFilesFromRootDir.size === 0 && filesUnderSymlink.length === 0 &&
@@ -279,7 +278,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const changedFilesFromRootDir = [
     ...fixedFilesFromRootDir,
     ...filesUnderSymlink,
-    ...listedDirs,
+    ...deletedDirs,
     ...symlinks.map((symlink) => symlink.path),
   ];
   const changedFiles = changedFilesFromRootDir.map((file) =>

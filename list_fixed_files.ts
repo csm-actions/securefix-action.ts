@@ -64,5 +64,13 @@ export const normalizeFixedFile = (file: string): string => {
 export const listDeletedDirs = (
   listedDirs: string[],
   newPaths: string[],
-): string[] =>
-  listedDirs.filter((dir) => !newPaths.some((p) => p.startsWith(`${dir}/`)));
+): string[] => {
+  const parents = new Set<string>();
+  for (const p of newPaths) {
+    const elems = p.split("/");
+    for (let i = 1; i < elems.length; i++) {
+      parents.add(elems.slice(0, i).join("/"));
+    }
+  }
+  return listedDirs.filter((dir) => !parents.has(dir));
+};

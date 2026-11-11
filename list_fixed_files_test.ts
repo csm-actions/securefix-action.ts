@@ -149,7 +149,7 @@ for (const file of ["", ".", "./", "a/..", "a/../"]) {
 
 Deno.test("listDeletedDirs: directories without new paths under them", () => {
   assertEquals(
-    listDeletedDirs(["a", "b", "c"], ["a/x", "b-2/y", "c"]),
+    listDeletedDirs(["a", "b", "c", "d/e"], ["a/x", "b-2/y", "c", "d/e/f/g"]),
     ["b", "c"],
   );
 });
