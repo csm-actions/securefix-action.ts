@@ -3,7 +3,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { assertEquals, assertThrows } from "@std/assert";
-import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
+import {
+  listDeletedDirs,
+  listFixedFiles,
+  normalizeFixedFile,
+} from "./list_fixed_files.ts";
 
 // Ignore the user's and the system's git config,
 // e.g. core.quotePath=false would hide the quoting issue.
@@ -142,3 +146,10 @@ for (const file of ["", ".", "./", "a/..", "a/../"]) {
     );
   });
 }
+
+Deno.test("listDeletedDirs: directories without new paths under them", () => {
+  assertEquals(
+    listDeletedDirs(["a", "b", "c"], ["a/x", "b-2/y", "c"]),
+    ["b", "c"],
+  );
+});

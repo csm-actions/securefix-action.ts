@@ -6,14 +6,13 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import type * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
-import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
+import {
+  listDeletedDirs,
+  listFixedFiles,
+  normalizeFixedFile,
+} from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
 import { getSubmoduleSHA } from "./submodule.ts";
-import {
-  findReplacedPaths,
-  getTreeModes,
-  listReplacedPathCandidates,
-} from "./git_tree.ts";
 import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
@@ -94,13 +93,7 @@ export type Result = {
    * and GitHub returns the run details.
    */
   serverWorkflowRun?: dispatch.WorkflowRun;
-  /**
-   * Changed paths from the workspace: changed and deleted files, symlinks,
-   * and paths replaced with directories (which are deleted).
-   * Submodules aren't included. Paths may not exist as regular files.
-   */
   changedFiles: string[];
-  /** The same as changedFiles, but paths are relative to rootDir */
   changedFilesFromRootDir: string[];
 };
 
@@ -191,6 +184,9 @@ export const request = async (inputs: Inputs): Promise<Result> => {
           );
         }
         // Files in the directory are listed separately
+        core.info(
+          `Detected a directory which replaced a file or a symlink: ${file}`,
+        );
         listedDirs.push(file);
         continue;
       }
@@ -204,34 +200,21 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const existingFiles = [...fixedFilesFromRootDir].filter((file) =>
     fs.existsSync(path.join(baseDir, file))
   );
-  // A file or a symlink replaced with a directory must be deleted explicitly
-  // to add paths under it. It's detected from listed directories and the
-  // parents of new paths, because git lists only the paths under it if files
-  // are specified, e.g. files: f/x where f was a file.
-  const candidates = listReplacedPathCandidates(listedDirs, [
+  // A file or a symlink replaced with a directory.
+  // If paths are added under it, the server deletes it because it's a file or
+  // a symlink in the base tree (commit-ts). Otherwise, it's listed in
+  // _files.txt without being uploaded, so the server deletes it as a deleted
+  // file.
+  const deletedDirs = listDeletedDirs(listedDirs, [
     ...existingFiles,
     ...symlinks.map((symlink) => symlink.path),
     ...submodules.map((submodule) => submodule.path),
   ]);
-  // They are sent in the metadata file and deleted explicitly by the server,
-  // because the server can't tell they are deleted as they exist as
-  // directories after the files in them are extracted.
-  const deletedFiles = findReplacedPaths(
-    candidates,
-    await getTreeModes(baseDir, candidates, {
-      skipWithoutRepository: inputs.useGit === false,
-    }),
-  );
-  for (const file of deletedFiles) {
-    core.info(
-      `Detected a directory which replaced a file or a symlink, which is deleted: ${file}`,
-    );
-  }
 
   if (
     fixedFilesFromRootDir.size === 0 && filesUnderSymlink.length === 0 &&
-    deletedFiles.length === 0 && submodules.length === 0 &&
-    symlinks.length === 0
+    deletedDirs.length === 0 &&
+    submodules.length === 0 && symlinks.length === 0
   ) {
     core.notice("No changes");
     return {
@@ -244,10 +227,12 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const txtPath = path.join(inputs.rootDir ?? "", `${artifactName}_files.txt`);
   const jsonPath = path.join(inputs.rootDir ?? "", `${artifactName}.json`);
 
-  createMetadataFile(inputs, submodules, symlinks, deletedFiles, jsonPath);
+  createMetadataFile(inputs, submodules, symlinks, jsonPath);
   fs.writeFileSync(
     txtPath,
-    [...fixedFilesFromRootDir, ...filesUnderSymlink].join("\n") + "\n",
+    [...fixedFilesFromRootDir, ...filesUnderSymlink, ...deletedDirs].join(
+      "\n",
+    ) + "\n",
   );
 
   // Exclude deleted files from upload (they are still listed in _files.txt)
@@ -294,7 +279,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const changedFilesFromRootDir = [
     ...fixedFilesFromRootDir,
     ...filesUnderSymlink,
-    ...deletedFiles,
+    ...listedDirs,
     ...symlinks.map((symlink) => symlink.path),
   ];
   const changedFiles = changedFilesFromRootDir.map((file) =>
@@ -337,7 +322,6 @@ const createMetadataFile = (
   inputs: Inputs,
   submodules: Array<{ path: string; sha: string }>,
   symlinks: Symlink[],
-  deletedFiles: string[],
   filePath: string,
 ) => {
   const value = {
@@ -351,7 +335,6 @@ const createMetadataFile = (
       custom: inputs.custom,
       submodules: submodules.length > 0 ? submodules : undefined,
       symlinks: symlinks.length > 0 ? symlinks : undefined,
-      deleted_files: deletedFiles.length > 0 ? deletedFiles : undefined,
     },
   };
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");

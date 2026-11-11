@@ -51,3 +51,18 @@ export const normalizeFixedFile = (file: string): string => {
   }
   return normalized;
 };
+
+/**
+ * listDeletedDirs returns the listed directories which have no new paths
+ * under them.
+ *
+ * A directory listed by git which isn't a submodule replaced a file or a
+ * symlink. If paths are added under it, the server deletes the old file or
+ * symlink because it's a file or a symlink in the base tree. Otherwise
+ * (e.g. all files in it are ignored), it must be deleted as a deleted file.
+ */
+export const listDeletedDirs = (
+  listedDirs: string[],
+  newPaths: string[],
+): string[] =>
+  listedDirs.filter((dir) => !newPaths.some((p) => p.startsWith(`${dir}/`)));
