@@ -32,6 +32,25 @@ const initRepo = (dir: string, content: string): string => {
   return git(dir, "rev-parse", "HEAD");
 };
 
+// withEnv sets an environment variable while fn runs.
+const withEnv = async (
+  name: string,
+  value: string,
+  fn: () => Promise<void>,
+) => {
+  const old = Deno.env.get(name);
+  Deno.env.set(name, value);
+  try {
+    await fn();
+  } finally {
+    if (old === undefined) {
+      Deno.env.delete(name);
+    } else {
+      Deno.env.set(name, old);
+    }
+  }
+};
+
 // withTmpDir runs fn in a new temporary directory and removes it afterwards.
 const withTmpDir = (fn: (dir: string) => Promise<void>) => async () => {
   const dir = fs.mkdtempSync(
@@ -111,6 +130,25 @@ Deno.test(
 Deno.test(
   "getSubmoduleSHA: git fails outside a repository",
   withTmpDir(async (dir) => {
-    await assertRejects(() => getSubmoduleSHA(dir));
+    // Don't find a repository containing the temporary directory
+    await withEnv("GIT_CEILING_DIRECTORIES", path.dirname(dir), async () => {
+      await assertRejects(
+        () => getSubmoduleSHA(dir),
+        Error,
+        `failed to check if a directory ${dir} is a submodule`,
+      );
+    });
+  }),
+);
+
+Deno.test(
+  "getSubmoduleSHA: GIT_DIR is ignored",
+  withTmpDir(async (dir) => {
+    initRepo(dir, "parent\n");
+    fs.mkdirSync(path.join(dir, "x"));
+    // With only GIT_DIR, git regards the current directory as the top level
+    await withEnv("GIT_DIR", path.join(dir, ".git"), async () => {
+      assertEquals(await getSubmoduleSHA(path.join(dir, "x")), "");
+    });
   }),
 );

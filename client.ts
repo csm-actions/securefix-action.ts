@@ -147,7 +147,9 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // follows the symlink and could find files in the link target.
   const filesUnderSymlink: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
-  for (const file of allFixedFiles) {
+  for (const listedFile of allFixedFiles) {
+    // git ls-files lists an untracked nested repository with a trailing slash
+    const file = listedFile.replace(/\/+$/, "");
     const fullPath = path.join(baseDir, file);
     if (isUnderSymlink(baseDir, file)) {
       core.info(`Detected a file under a symlink, which is deleted: ${file}`);
@@ -163,19 +165,18 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
       const sha = await getSubmoduleSHA(fullPath);
       if (!sha) {
-        // Git lists a regular directory only when a symlink or a file is
-        // replaced with it. The commit fails because the old entry isn't
-        // deleted, so fail here with a clear message.
+        // Git lists a regular directory only when a file, a symlink, or a
+        // submodule is replaced with it. The commit fails because the old
+        // entry isn't deleted, so fail here with a clear message.
+        // A directory can also be specified in files with useGit: false.
         throw new Error(
           `${file} is a directory but not a submodule. ` +
-            "Replacing a file or a symlink with a directory isn't supported. " +
-            "If you specify files, specify files in the directory instead of the directory",
+            "Replacing a file, a symlink, or a submodule with a directory isn't supported yet. " +
+            `If ${file} isn't tracked by Git and you specified it in files, specify files in it instead`,
         );
       }
-      // git ls-files lists an untracked nested repository with a trailing slash
-      const submodulePath = file.replace(/\/+$/, "");
-      core.info(`Detected submodule: ${submodulePath} (${sha})`);
-      submodules.push({ path: submodulePath, sha });
+      core.info(`Detected submodule: ${file} (${sha})`);
+      submodules.push({ path: file, sha });
     } else {
       fixedFilesFromRootDir.add(file);
     }
