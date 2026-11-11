@@ -153,7 +153,9 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // the server can't tell they are deleted as they exist as directories.
   const deletedFiles: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
-  for (const file of allFixedFiles) {
+  for (const listedFile of allFixedFiles) {
+    // git ls-files lists an untracked nested repository with a trailing slash
+    const file = listedFile.replace(/\/+$/, "");
     const fullPath = path.join(baseDir, file);
     if (isUnderSymlink(baseDir, file)) {
       core.info(`Detected a file under a symlink, which is deleted: ${file}`);
@@ -172,23 +174,21 @@ export const request = async (inputs: Inputs): Promise<Result> => {
         // Git lists a regular directory only when a file, a symlink, or a
         // submodule is replaced with it. Files in the directory are listed
         // separately.
-        const dirPath = file.replace(/\/+$/, "");
-        if (!(await isTracked(baseDir, dirPath))) {
+        if (!(await isTracked(baseDir, file))) {
+          // e.g. a directory specified in files with useGit: false
           throw new Error(
-            `${file} is a directory but not a submodule. ` +
-              "If you specify files, specify files in the directory instead of the directory",
+            `${file} is a directory but neither a submodule nor a tracked path replaced with a directory. ` +
+              "If you specified it in files, specify files in it instead",
           );
         }
         core.info(
-          `Detected a directory which replaced a tracked path, which is deleted: ${dirPath}`,
+          `Detected a directory which replaced a tracked path, which is deleted: ${file}`,
         );
-        deletedFiles.push(dirPath);
+        deletedFiles.push(file);
         continue;
       }
-      // git ls-files lists an untracked nested repository with a trailing slash
-      const submodulePath = file.replace(/\/+$/, "");
-      core.info(`Detected submodule: ${submodulePath} (${sha})`);
-      submodules.push({ path: submodulePath, sha });
+      core.info(`Detected submodule: ${file} (${sha})`);
+      submodules.push({ path: file, sha });
     } else {
       fixedFilesFromRootDir.add(file);
     }

@@ -1,4 +1,10 @@
+import process from "node:process";
 import * as exec from "@actions/exec";
+
+// They make git use another repository or work tree than the one at dir.
+// e.g. if only GIT_DIR is set, git regards the current directory as the top
+// level, so every directory would look like a submodule.
+const repositoryEnvNames = ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"];
 
 /**
  * Returns the commit SHA of the submodule checked out at dir.
@@ -15,11 +21,27 @@ import * as exec from "@actions/exec";
  * is owned by another user (safe.directory).
  */
 export const getSubmoduleSHA = async (dir: string): Promise<string> => {
-  const result = await exec.getExecOutput(
-    "git",
-    ["-C", dir, "rev-parse", "--show-prefix", "HEAD"],
-  );
-  const [prefix, sha] = result.stdout.split("\n");
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && !repositoryEnvNames.includes(key)) {
+      env[key] = value;
+    }
+  }
+  let stdout: string;
+  try {
+    const result = await exec.getExecOutput(
+      "git",
+      ["-C", dir, "rev-parse", "--show-prefix", "HEAD"],
+      { env },
+    );
+    stdout = result.stdout;
+  } catch (error: unknown) {
+    throw new Error(
+      `failed to check if a directory ${dir} is a submodule: ${error}`,
+      { cause: error },
+    );
+  }
+  const [prefix, sha] = stdout.split("\n");
   if (prefix !== "") {
     return "";
   }
