@@ -2,8 +2,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { assertEquals, assertThrows } from "@std/assert";
-import { findReplacedParents, getIndexModes } from "./git_index.ts";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import {
+  findReplacedPaths,
+  getTreeModes,
+  listReplacedPathCandidates,
+} from "./git_index.ts";
 
 // Ignore the user's and the system's git config.
 Deno.env.set("GIT_CONFIG_GLOBAL", os.devNull);
@@ -13,9 +17,22 @@ const git = (dir: string, ...args: string[]) => {
   execFileSync("git", args, { cwd: dir });
 };
 
+const commit = (dir: string) => {
+  git(
+    dir,
+    "-c",
+    "user.name=test",
+    "-c",
+    "user.email=test@example.com",
+    "commit",
+    "-qm",
+    "commit",
+  );
+};
+
 // withTmpDir runs fn in a new temporary directory and removes it afterwards.
 const withTmpDir = (fn: (dir: string) => Promise<void>) => async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "securefix-index-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "securefix-tree-test-"));
   try {
     await fn(dir);
   } finally {
@@ -23,88 +40,152 @@ const withTmpDir = (fn: (dir: string) => Promise<void>) => async () => {
   }
 };
 
+// withEnv sets an environment variable while fn runs.
+const withEnv = async (
+  name: string,
+  value: string,
+  fn: () => Promise<void>,
+) => {
+  const old = Deno.env.get(name);
+  Deno.env.set(name, value);
+  try {
+    await fn();
+  } finally {
+    if (old === undefined) {
+      Deno.env.delete(name);
+    } else {
+      Deno.env.set(name, old);
+    }
+  }
+};
+
+// setupRepo creates a repository whose HEAD has a file "file", an executable
+// "exe", a symlink "link", a file "dir/a.txt", a file "[x]", and a submodule
+// "sub".
+const setupRepo = (dir: string) => {
+  git(dir, "init", "-q");
+  fs.writeFileSync(path.join(dir, "file"), "");
+  fs.writeFileSync(path.join(dir, "exe"), "");
+  fs.chmodSync(path.join(dir, "exe"), 0o755);
+  fs.symlinkSync("file", path.join(dir, "link"));
+  fs.mkdirSync(path.join(dir, "dir"));
+  fs.writeFileSync(path.join(dir, "dir", "a.txt"), "");
+  fs.writeFileSync(path.join(dir, "[x]"), "");
+  git(dir, "add", ".");
+  git(
+    dir,
+    "update-index",
+    "--add",
+    "--cacheinfo",
+    "160000,1111111111111111111111111111111111111111,sub",
+  );
+  commit(dir);
+};
+
 Deno.test(
-  "getIndexModes: files, symlinks, and submodules",
+  "getTreeModes: modes of the given paths in HEAD",
   withTmpDir(async (dir) => {
-    git(dir, "init", "-q");
-    fs.writeFileSync(path.join(dir, "file"), "");
-    fs.writeFileSync(path.join(dir, "exe"), "");
-    fs.chmodSync(path.join(dir, "exe"), 0o755);
-    fs.symlinkSync("file", path.join(dir, "link"));
-    fs.mkdirSync(path.join(dir, "dir"));
-    fs.writeFileSync(path.join(dir, "dir", "a.txt"), "");
-    git(dir, "add", ".");
-    git(
-      dir,
-      "update-index",
-      "--add",
-      "--cacheinfo",
-      "160000,1111111111111111111111111111111111111111,sub",
-    );
-    // A file replaced with a directory is still in the index
-    fs.rmSync(path.join(dir, "file"));
-    fs.mkdirSync(path.join(dir, "file"));
+    setupRepo(dir);
     assertEquals(
-      await getIndexModes(dir),
+      await getTreeModes(dir, [
+        "file",
+        "exe",
+        "link",
+        "dir/a.txt",
+        "sub",
+        "[x]",
+        "[f]ile",
+        "new",
+      ]),
       new Map([
-        ["dir/a.txt", "100644"],
-        ["exe", "100755"],
         ["file", "100644"],
+        ["exe", "100755"],
         ["link", "120000"],
+        ["dir/a.txt", "100644"],
         ["sub", "160000"],
+        ["[x]", "100644"],
       ]),
     );
-    // Paths are relative to dir
+  }),
+);
+
+Deno.test(
+  "getTreeModes: paths are relative to dir",
+  withTmpDir(async (dir) => {
+    setupRepo(dir);
     assertEquals(
-      await getIndexModes(path.join(dir, "dir")),
+      await getTreeModes(path.join(dir, "dir"), ["a.txt", "file"]),
       new Map([["a.txt", "100644"]]),
     );
   }),
 );
 
 Deno.test(
-  "getIndexModes: outside a repository",
+  "getTreeModes: a file removed by git rm is in HEAD",
   withTmpDir(async (dir) => {
-    const old = Deno.env.get("GIT_CEILING_DIRECTORIES");
-    Deno.env.set("GIT_CEILING_DIRECTORIES", path.dirname(dir));
-    try {
-      assertEquals(await getIndexModes(dir), new Map());
-    } finally {
-      if (old === undefined) {
-        Deno.env.delete("GIT_CEILING_DIRECTORIES");
-      } else {
-        Deno.env.set("GIT_CEILING_DIRECTORIES", old);
-      }
-    }
+    setupRepo(dir);
+    git(dir, "rm", "-q", "file");
+    fs.mkdirSync(path.join(dir, "file"));
+    fs.writeFileSync(path.join(dir, "file", "x"), "");
+    assertEquals(
+      await getTreeModes(dir, ["file"]),
+      new Map([["file", "100644"]]),
+    );
   }),
 );
 
-const indexModes = new Map([
-  ["f", "100644"],
-  ["link", "120000"],
-  ["sub", "160000"],
-  ["dir/a.txt", "100644"],
-]);
+Deno.test(
+  "getTreeModes: a repository without commits",
+  withTmpDir(async (dir) => {
+    git(dir, "init", "-q");
+    assertEquals(await getTreeModes(dir, ["file"]), new Map());
+  }),
+);
 
-Deno.test("findReplacedParents: a file and a symlink replaced with directories", () => {
+Deno.test(
+  "getTreeModes: outside a repository",
+  withTmpDir(async (dir) => {
+    // Don't find a repository containing the temporary directory
+    await withEnv("GIT_CEILING_DIRECTORIES", path.dirname(dir), async () => {
+      assertEquals(
+        await getTreeModes(dir, ["file"], { allowOutsideRepository: true }),
+        new Map(),
+      );
+      await assertRejects(
+        () => getTreeModes(dir, ["file"]),
+        Error,
+        "failed to check if",
+      );
+    });
+  }),
+);
+
+Deno.test("listReplacedPathCandidates", () => {
   assertEquals(
-    findReplacedParents(
-      ["f/x", "f/y/z", "link/a", "dir/b.txt", "new/c"],
-      indexModes,
-    ),
-    ["f", "link"],
+    listReplacedPathCandidates(["d"], ["f/x", "f/y/z", "a.txt"]).sort(),
+    ["d", "f", "f/y"],
   );
 });
 
-Deno.test("findReplacedParents: the path itself isn't a parent", () => {
-  // e.g. a file replaced with a symlink at the same path
-  assertEquals(findReplacedParents(["f", "link"], indexModes), []);
+const modes = new Map([
+  ["f", "100644"],
+  ["exe", "100755"],
+  ["link", "120000"],
+  ["sub", "160000"],
+  ["dir", "040000"],
+]);
+
+Deno.test("findReplacedPaths: files and symlinks are replaced", () => {
+  assertEquals(
+    findReplacedPaths(["f", "exe", "link", "dir", "new"], modes),
+    ["f", "exe", "link"],
+  );
 });
 
-Deno.test("findReplacedParents: a path under a submodule throws", () => {
+Deno.test("findReplacedPaths: a submodule throws", () => {
   assertThrows(
-    () => findReplacedParents(["sub/x"], indexModes),
+    () => findReplacedPaths(["sub"], modes),
     Error,
-    "sub/x is under a submodule sub",
+    "sub is a submodule in HEAD",
   );
 });
