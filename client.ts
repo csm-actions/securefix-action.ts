@@ -153,8 +153,14 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // the server can't tell they are deleted as they exist as directories.
   const deletedFiles: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
+  // Different paths can be normalized to the same path, e.g. "sub" and "sub/"
+  const normalizedFiles = new Set<string>();
   for (const listedFile of allFixedFiles) {
     const file = normalizeFixedFile(listedFile);
+    if (normalizedFiles.has(file)) {
+      continue;
+    }
+    normalizedFiles.add(file);
     const fullPath = path.join(baseDir, file);
     if (isUnderSymlink(baseDir, file)) {
       core.info(`Detected a file under a symlink, which is deleted: ${file}`);

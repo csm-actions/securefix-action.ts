@@ -111,11 +111,27 @@ Deno.test("paths are relative to rootDir", async () => {
   }
 });
 
-Deno.test("normalizeFixedFile: trailing slashes are removed", () => {
-  assertEquals(normalizeFixedFile("a.txt"), "a.txt");
-  assertEquals(normalizeFixedFile("sub/"), "sub");
-  assertEquals(normalizeFixedFile("a/b//"), "a/b");
-});
+for (
+  const [file, expected] of [
+    ["a.txt", "a.txt"],
+    ["sub/", "sub"],
+    ["a/b//", "a/b"],
+    ["./a.txt", "a.txt"],
+    ["a/./b", "a/b"],
+    ["a//b", "a/b"],
+    ["a/../b/", "b"],
+  ]
+) {
+  Deno.test(`normalizeFixedFile: ${JSON.stringify(file)}`, () => {
+    assertEquals(normalizeFixedFile(file), expected);
+  });
+}
+
+for (const file of ["..", "../a", "a/../../b", "/a", "/"]) {
+  Deno.test(`normalizeFixedFile: outside the root directory ${JSON.stringify(file)} throws`, () => {
+    assertThrows(() => normalizeFixedFile(file), Error);
+  });
+}
 
 for (const file of ["", ".", "./", "a/..", "a/../"]) {
   Deno.test(`normalizeFixedFile: root directory ${JSON.stringify(file)} throws`, () => {
