@@ -13,7 +13,7 @@ import {
   findReplacedPaths,
   getTreeModes,
   listReplacedPathCandidates,
-} from "./git_index.ts";
+} from "./git_tree.ts";
 import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
 
 export type { WorkflowRun } from "@csm-actions/dispatch";
@@ -157,10 +157,6 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // They are kept apart from fixedFilesFromRootDir, because fs.existsSync
   // follows the symlink and could find files in the link target.
   const filesUnderSymlink: string[] = [];
-  // Paths of files, symlinks, or submodules replaced with directories.
-  // They are sent in the metadata file and deleted explicitly by the server,
-  // because the Create a tree API can't add files under them otherwise, and
-  // the server can't tell they are deleted as they exist as directories.
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
   // Directories which aren't submodules. Git lists a regular directory only
   // when a file or a symlink is replaced with it.
@@ -217,10 +213,13 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     ...symlinks.map((symlink) => symlink.path),
     ...submodules.map((submodule) => submodule.path),
   ]);
+  // They are sent in the metadata file and deleted explicitly by the server,
+  // because the server can't tell they are deleted as they exist as
+  // directories after the files in them are extracted.
   const deletedFiles = findReplacedPaths(
     candidates,
     await getTreeModes(baseDir, candidates, {
-      allowOutsideRepository: inputs.useGit === false,
+      skipWithoutRepository: inputs.useGit === false,
     }),
   );
   for (const file of deletedFiles) {

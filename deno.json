@@ -10,7 +10,7 @@
       "LICENSE",
       "README.md",
       "client.ts",
-      "git_index.ts",
+      "git_tree.ts",
       "list_fixed_files.ts",
       "server_workflow.ts",
       "submodule.ts",

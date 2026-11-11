@@ -1,3 +1,4 @@
+import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 
 /** The mode of a submodule (gitlink) in a tree */
@@ -11,11 +12,12 @@ const chunkSize = 500;
 
 export type TreeModesOptions = {
   /**
-   * Return an empty map if dir isn't in a Git repository, e.g. files are
-   * specified with useGit: false outside a repository.
+   * Return an empty map if git can't tell that dir is in a Git work tree for
+   * any reason, e.g. git isn't installed or dir isn't in a repository.
+   * It's used with useGit: false, which doesn't require git otherwise.
    * Otherwise it throws an error.
    */
-  allowOutsideRepository?: boolean;
+  skipWithoutRepository?: boolean;
 };
 
 /**
@@ -38,20 +40,31 @@ export const getTreeModes = async (
   if (paths.length === 0) {
     return modes;
   }
-  const workTree = await exec.getExecOutput(
-    "git",
-    ["-C", dir, "rev-parse", "--is-inside-work-tree"],
-    { ignoreReturnCode: true, silent: true },
-  );
-  if (workTree.exitCode !== 0) {
-    if (
-      opts?.allowOutsideRepository &&
-      /not a git repository/i.test(workTree.stderr)
-    ) {
+  let workTreeError = "";
+  try {
+    const workTree = await exec.getExecOutput(
+      "git",
+      ["-C", dir, "rev-parse", "--is-inside-work-tree"],
+      { ignoreReturnCode: true, silent: true },
+    );
+    if (workTree.exitCode !== 0) {
+      workTreeError = workTree.stderr.trim();
+    } else if (workTree.stdout.trim() !== "true") {
+      workTreeError = "not in a work tree";
+    }
+  } catch (error: unknown) {
+    // e.g. git isn't installed
+    workTreeError = `${error}`;
+  }
+  if (workTreeError) {
+    if (opts?.skipWithoutRepository) {
+      core.info(
+        `Skip detecting files or symlinks replaced with directories, because ${dir} isn't in a Git work tree: ${workTreeError}`,
+      );
       return modes;
     }
     throw new Error(
-      `failed to check if ${dir} is in a Git repository: ${workTree.stderr}`,
+      `failed to check if ${dir} is in a Git work tree: ${workTreeError}`,
     );
   }
   const head = await exec.getExecOutput(
@@ -132,8 +145,8 @@ export const findReplacedPaths = (
     const mode = modes.get(p);
     if (mode === gitlinkMode) {
       throw new Error(
-        `${p} is a submodule in HEAD, but it's a regular directory or it isn't checked out. ` +
-          "Replacing a submodule with a directory isn't supported",
+        `${p} is a submodule in HEAD. ` +
+          "Paths under a submodule can't be committed, and replacing a submodule with a directory isn't supported",
       );
     }
     if (mode !== undefined && fileModes.includes(mode)) {

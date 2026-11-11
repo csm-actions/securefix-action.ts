@@ -7,7 +7,7 @@ import {
   findReplacedPaths,
   getTreeModes,
   listReplacedPathCandidates,
-} from "./git_index.ts";
+} from "./git_tree.ts";
 
 // Ignore the user's and the system's git config.
 Deno.env.set("GIT_CONFIG_GLOBAL", os.devNull);
@@ -148,7 +148,7 @@ Deno.test(
     // Don't find a repository containing the temporary directory
     await withEnv("GIT_CEILING_DIRECTORIES", path.dirname(dir), async () => {
       assertEquals(
-        await getTreeModes(dir, ["file"], { allowOutsideRepository: true }),
+        await getTreeModes(dir, ["file"], { skipWithoutRepository: true }),
         new Map(),
       );
       await assertRejects(
@@ -156,6 +156,39 @@ Deno.test(
         Error,
         "failed to check if",
       );
+    });
+  }),
+);
+
+Deno.test(
+  "getTreeModes: in a git directory",
+  withTmpDir(async (dir) => {
+    setupRepo(dir);
+    await assertRejects(
+      () => getTreeModes(path.join(dir, ".git"), ["file"]),
+      Error,
+      "not in a work tree",
+    );
+    assertEquals(
+      await getTreeModes(path.join(dir, ".git"), ["file"], {
+        skipWithoutRepository: true,
+      }),
+      new Map(),
+    );
+  }),
+);
+
+Deno.test(
+  "getTreeModes: git isn't installed",
+  withTmpDir(async (dir) => {
+    setupRepo(dir);
+    // git can't be found
+    await withEnv("PATH", dir, async () => {
+      assertEquals(
+        await getTreeModes(dir, ["file"], { skipWithoutRepository: true }),
+        new Map(),
+      );
+      await assertRejects(() => getTreeModes(dir, ["file"]));
     });
   }),
 );
@@ -186,6 +219,6 @@ Deno.test("findReplacedPaths: a submodule throws", () => {
   assertThrows(
     () => findReplacedPaths(["sub"], modes),
     Error,
-    "sub is a submodule in HEAD",
+    "sub is a submodule in HEAD. Paths under a submodule can't be committed",
   );
 });
