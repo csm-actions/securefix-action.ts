@@ -6,7 +6,11 @@ import { DefaultArtifactClient } from "@actions/artifact";
 import type * as githubAppToken from "@suzuki-shunsuke/github-app-token";
 import * as dispatch from "@csm-actions/dispatch";
 import * as label from "@csm-actions/label";
-import { listFixedFiles, normalizeFixedFile } from "./list_fixed_files.ts";
+import {
+  listDeletedDirs,
+  listFixedFiles,
+  normalizeFixedFile,
+} from "./list_fixed_files.ts";
 import { resolveServer } from "./server_workflow.ts";
 import { getSubmoduleSHA } from "./submodule.ts";
 import { isUnderSymlink, readSymlink, type Symlink } from "./symlink.ts";
@@ -147,6 +151,10 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   // follows the symlink and could find files in the link target.
   const filesUnderSymlink: string[] = [];
   const baseDir = path.join(inputs.workspace, inputs.rootDir ?? "");
+  // Directories which aren't submodules. Git lists a regular directory only
+  // when a file or a symlink is replaced with it, and files in it are listed
+  // separately. With useGit: false, it can be specified in files.
+  const listedDirs: string[] = [];
   // Different paths can be normalized to the same path, e.g. "sub" and "sub/"
   const normalizedFiles = new Set<string>();
   for (const listedFile of allFixedFiles) {
@@ -170,15 +178,11 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
       const sha = await getSubmoduleSHA(fullPath);
       if (!sha) {
-        // Git lists a regular directory only when a file, a symlink, or a
-        // submodule is replaced with it. The commit fails because the old
-        // entry isn't deleted, so fail here with a clear message.
-        // A directory can also be specified in files with useGit: false.
-        throw new Error(
-          `${file} is a directory but not a submodule. ` +
-            "Replacing a file, a symlink, or a submodule with a directory isn't supported yet. " +
-            `If ${file} isn't tracked by Git and you specified it in files, specify files in it instead`,
+        core.info(
+          `Detected a directory which replaced a file or a symlink: ${file}`,
         );
+        listedDirs.push(file);
+        continue;
       }
       core.info(`Detected submodule: ${file} (${sha})`);
       submodules.push({ path: file, sha });
@@ -187,8 +191,28 @@ export const request = async (inputs: Inputs): Promise<Result> => {
     }
   }
 
+  const existingFiles = [...fixedFilesFromRootDir].filter((file) =>
+    fs.existsSync(path.join(baseDir, file))
+  );
+  // Listed directories without new paths under them. See listDeletedDirs.
+  const deletedDirs = listDeletedDirs(listedDirs, [
+    ...existingFiles,
+    ...symlinks.map((symlink) => symlink.path),
+    ...submodules.map((submodule) => submodule.path),
+  ]);
+  if (inputs.useGit === false && deletedDirs.length > 0) {
+    // With useGit: false, files in a directory aren't listed, so the
+    // directory would be committed as a deletion without its files.
+    throw new Error(
+      `${
+        deletedDirs.join(", ")
+      } is a directory but not a submodule, and no files in it are specified. Specify files in it instead`,
+    );
+  }
+
   if (
     fixedFilesFromRootDir.size === 0 && filesUnderSymlink.length === 0 &&
+    deletedDirs.length === 0 &&
     submodules.length === 0 && symlinks.length === 0
   ) {
     core.notice("No changes");
@@ -205,13 +229,15 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   createMetadataFile(inputs, submodules, symlinks, jsonPath);
   fs.writeFileSync(
     txtPath,
-    [...fixedFilesFromRootDir, ...filesUnderSymlink].join("\n") + "\n",
+    [...fixedFilesFromRootDir, ...filesUnderSymlink, ...deletedDirs].join(
+      "\n",
+    ) + "\n",
   );
 
   // Exclude deleted files from upload (they are still listed in _files.txt)
-  const uploadFiles = [...fixedFilesFromRootDir]
-    .filter((file) => fs.existsSync(path.join(baseDir, file)))
-    .map((file) => path.join(inputs.rootDir ?? "", file));
+  const uploadFiles = existingFiles.map((file) =>
+    path.join(inputs.rootDir ?? "", file)
+  );
 
   // upload artifact
   const artifact = new DefaultArtifactClient();
@@ -252,6 +278,7 @@ export const request = async (inputs: Inputs): Promise<Result> => {
   const changedFilesFromRootDir = [
     ...fixedFilesFromRootDir,
     ...filesUnderSymlink,
+    ...deletedDirs,
     ...symlinks.map((symlink) => symlink.path),
   ];
   const changedFiles = changedFilesFromRootDir.map((file) =>
